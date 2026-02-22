@@ -538,7 +538,7 @@ function ProjectsContent() {
           </p>
         </div>
         <div className={styles.headerActions}>
-          {dashboardSession && (
+          {user && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '8px',
               padding: '6px 14px', background: 'rgba(255,255,255,0.03)',
@@ -546,7 +546,7 @@ function ProjectsContent() {
               fontSize: '0.85rem', color: '#94a3b8',
             }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00C781', display: 'inline-block' }} />
-              <span style={{ color: '#fff', fontWeight: 600 }}>{dashboardSession.name}</span>
+              <span style={{ color: '#fff', fontWeight: 600 }}>{user.display_name || user.first_name || user.email}</span>
               <span style={{ opacity: 0.3 }}>|</span>
               <span style={{ color: '#0070F3', fontWeight: 600 }}>{isRTL ? 'مسؤول' : 'Manager'}</span>
             </div>
@@ -556,7 +556,7 @@ function ProjectsContent() {
           </button>
           <button
             className={styles.languageBtn}
-            onClick={() => { logoutFromDashboard(); setIsAuthenticated(false) }}
+            onClick={() => { logout() }}
             style={{ background: 'rgba(255, 68, 68, 0.1)', borderColor: 'rgba(255, 68, 68, 0.2)', color: '#ff6b6b' }}
           >
             {isRTL ? 'خروج' : 'Logout'}

@@ -93,6 +93,10 @@ function DashboardContent() {
   const availableSections = sectionsList
 
   const toggleSection = (sectionId: string) => {
+    if (sectionId === 'contract') {
+      router.push('/dashboard/contract')
+      return
+    }
     setEnabledSectionIds(prev => 
       prev.includes(sectionId) 
         ? prev.filter(id => id !== sectionId)
@@ -172,7 +176,7 @@ function DashboardContent() {
             {availableSections.map((section) => (
               <button
                 key={section.id}
-                className={`${styles.toggleBtn} ${enabledSectionIds.includes(section.id) ? styles.active : ''} ${section.id !== 'project' && section.id !== 'contract' ? styles.hiddenTab : ''}`}
+                className={`${styles.toggleBtn} ${section.id === 'contract' ? '' : enabledSectionIds.includes(section.id) ? styles.active : ''} ${section.id !== 'project' && section.id !== 'contract' ? styles.hiddenTab : ''}`}
                 onClick={() => toggleSection(section.id)}
                 disabled={section.id !== 'project' && section.id !== 'contract'}
                 aria-hidden={section.id !== 'project' && section.id !== 'contract'}

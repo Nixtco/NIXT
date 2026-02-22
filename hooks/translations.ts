@@ -29,6 +29,7 @@ export const translations = {
       analytics: 'إحصائيات الأداء',
       financial: 'لوحة المتابعة المالية',
       support: 'مركز الدعم والمساعدة',
+      contract: 'عقد التوقيع',
     },
     project: {
       title: 'نظرة عامة على المشروع',
@@ -339,6 +340,7 @@ export const translations = {
       analytics: 'Performance Analytics',
       financial: 'Financial Overview',
       support: 'Support Center',
+      contract: 'Contract Signing',
     },
     project: {
       title: 'Project Overview',

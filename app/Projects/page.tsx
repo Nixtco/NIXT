@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { LanguageProvider, useLanguage } from '@/hooks/useLanguage'
-import { useAuth } from '@/hooks/useAuth'
-import DashboardLogin from '@/components/Dashboard/DashboardLogin'
+import { useGlobalAuth } from '@/lib/auth-context'
 import {
   BarChartIcon,
   FolderPlusIcon,
@@ -83,12 +83,10 @@ function PriorityBadge({ priority, isRTL }: { priority: string; isRTL: boolean }
 // ==================== Main Component ====================
 
 function ProjectsContent() {
+  const router = useRouter()
   const { t, language, setLanguage, dir } = useLanguage()
-  const { dashboardSession, isLoggedIn, logoutFromDashboard } = useAuth()
+  const { user, isAuthenticated, isLoading, isAdmin, logout } = useGlobalAuth()
   const isRTL = language === 'ar'
-
-  // Auth state
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Data state
   const [projects, setProjects] = useState<Project[]>([])
@@ -423,14 +421,35 @@ function ProjectsContent() {
 
   // ==================== Auth Gate ====================
 
-  const userIsLoggedIn = isLoggedIn && dashboardSession
-  const isManager = dashboardSession?.role === 'manager'
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login')
+    }
+  }, [isAuthenticated, isLoading, router])
 
-  if (!userIsLoggedIn && !isAuthenticated) {
-    return <DashboardLogin onLoginSuccess={() => setIsAuthenticated(true)} context="controllers" />
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#030014'
+      }}>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
   }
 
-  if (userIsLoggedIn && !isManager && !isAuthenticated) {
+  // If not authenticated, return null (router will redirect)
+  if (!isAuthenticated || !user) {
+    return null
+  }
+
+  // If logged in but not an admin/owner, show access denied
+  if (!isAdmin) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -455,7 +474,7 @@ function ProjectsContent() {
         </p>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button
-            onClick={() => { logoutFromDashboard(); setIsAuthenticated(false) }}
+            onClick={() => { logout(); router.push('/login') }}
             style={{
               padding: '10px 24px', borderRadius: '10px',
               background: 'rgba(112, 66, 248, 0.15)', border: '1px solid rgba(112, 66, 248, 0.3)',

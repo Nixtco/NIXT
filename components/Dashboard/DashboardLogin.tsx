@@ -1,3 +1,11 @@
+/**
+ * @deprecated This component is no longer used in the application.
+ * The app now uses the global authentication system (useGlobalAuth) instead.
+ * All pages have been updated to redirect to /login page.
+ * 
+ * This file is kept for reference only and may be removed in future cleanup.
+ */
+
 'use client'
 
 import { useState, FormEvent } from 'react'

@@ -20,6 +20,7 @@ export interface Project {
   status: 'active' | 'pending' | 'completed' | 'onhold'
   deadline: string
   team: string[]
+  has_signed: boolean
   created_at: string
   updated_at: string
 }
@@ -80,6 +81,7 @@ export interface UpdateProjectPayload {
   status?: 'active' | 'pending' | 'completed' | 'onhold'
   deadline?: string
   team?: string[]
+  has_signed?: boolean
 }
 
 export interface GetProjectsParams {
@@ -94,7 +96,7 @@ export interface GetProjectsParams {
 
 // ==================== API Functions ====================
 
-const BASE_PATH = '/api/v1/projects'
+const BASE_PATH = '/projects'
 
 /**
  * Get all projects with optional search, filter, and pagination
@@ -124,7 +126,7 @@ export async function getProjectStatistics(): Promise<ProjectStatistics> {
 }
 
 /**
- * Get projects by user ID
+ * Get projects by user ID (requires admin permissions)
  */
 export async function getProjectsByUserId(
   userId: string,
@@ -139,6 +141,26 @@ export async function getProjectsByUserId(
   const url = query
     ? `${BASE_PATH}/user/${userId}?${query}`
     : `${BASE_PATH}/user/${userId}`
+
+  return apiCall<ProjectsResponse>(url)
+}
+
+/**
+ * Get current user's projects (no admin permissions required)
+ * This endpoint allows any authenticated user to view their own projects
+ */
+export async function getMyProjects(
+  params?: { limit?: number; offset?: number; order?: string }
+): Promise<ProjectsResponse> {
+  const queryParams = new URLSearchParams()
+  if (params?.limit) queryParams.append('limit', params.limit.toString())
+  if (params?.offset !== undefined) queryParams.append('offset', params.offset.toString())
+  if (params?.order) queryParams.append('order', params.order)
+
+  const query = queryParams.toString()
+  const url = query
+    ? `${BASE_PATH}/my-projects?${query}`
+    : `${BASE_PATH}/my-projects`
 
   return apiCall<ProjectsResponse>(url)
 }
@@ -208,9 +230,15 @@ export async function addProgressItem(
   projectId: string,
   item: ProgressItem
 ): Promise<MutationResponse> {
+  const payload = { item }
+  console.log('addProgressItem API call:', {
+    url: `${BASE_PATH}/${projectId}/progress`,
+    payload,
+    stringified: JSON.stringify(payload)
+  })
   return apiCall<MutationResponse>(`${BASE_PATH}/${projectId}/progress`, {
     method: 'POST',
-    body: JSON.stringify({ item }),
+    body: JSON.stringify(payload),
   })
 }
 

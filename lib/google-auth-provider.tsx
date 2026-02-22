@@ -1,7 +1,7 @@
 'use client';
 
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { ReactNode, createContext, useContext } from 'react';
+import { ReactNode, createContext, useContext, useEffect } from 'react';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
@@ -12,8 +12,16 @@ export function useGoogleAuthAvailable() {
 }
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
+    useEffect(() => {
+        if (!GOOGLE_CLIENT_ID) {
+            console.warn('⚠️ NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set. Google login will be disabled.');
+            console.info('ℹ️ See GOOGLE_OAUTH_SETUP.md for setup instructions.');
+        } else {
+            console.log('✅ Google OAuth is configured');
+        }
+    }, []);
+
     if (!GOOGLE_CLIENT_ID) {
-        console.warn('NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set. Google login will be disabled.');
         return (
             <GoogleAuthAvailableContext.Provider value={false}>
                 {children}

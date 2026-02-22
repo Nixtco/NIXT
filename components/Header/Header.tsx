@@ -2,6 +2,8 @@
 
 import { FC, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useGlobalAuth } from '@/lib/auth-context'
 import styles from './Header.module.css'
 
 interface HeaderProps {
@@ -10,6 +12,8 @@ interface HeaderProps {
 
 const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const { user, isAuthenticated } = useGlobalAuth()
+  const router = useRouter()
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault()
@@ -19,6 +23,27 @@ const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen)
+  }
+
+  const handleUserClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault()
+    setIsMenuOpen(false)
+    
+    if (user) {
+      const isAdmin = user.role === 'admin' || user.role === 'owner'
+      
+      if (isAdmin) {
+        router.push('/controllers')
+      } else {
+        router.push('/dashboard')
+      }
+    }
+  }
+
+  const getUserDisplayName = (): string => {
+    if (!user) return 'User'
+    
+    return user.display_name || user.first_name || user.email.split('@')[0]
   }
 
   return (
@@ -56,9 +81,20 @@ const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
           </Link>
         </li>
         <li>
-          <Link href="/login" className={styles.loginBtn}>
-            Login
-          </Link>
+          {isAuthenticated && user ? (
+            <a 
+              href="#" 
+              onClick={handleUserClick}
+              className={styles.userNameBtn}
+              title={`Go to ${user.role === 'admin' || user.role === 'owner' ? 'Controllers' : 'Dashboard'}`}
+            >
+              {getUserDisplayName()}
+            </a>
+          ) : (
+            <Link href="/login" className={styles.loginBtn}>
+              Login
+            </Link>
+          )}
         </li>
       </ul>
     </nav>

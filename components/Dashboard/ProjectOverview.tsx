@@ -596,7 +596,7 @@ const ProjectOverview: FC<{ projectId?: string }> = ({ projectId }) => {
           console.log('📦🙌🙌🙌🙌🙌 API Response:', response)
           if (response.success && response.data) {
             console.log(`✅ Successfully loaded project: ${response.data.name}`)
-            setProjects(response.data)
+            setProjects(Array.isArray(response.data) ? response.data : [response.data])
           } else {
             console.error('❌ API returned success=false or no data:', response)
             setError(isRTL ? 'فشل في تحميل المشروع' : 'Failed to load project')
@@ -607,7 +607,7 @@ const ProjectOverview: FC<{ projectId?: string }> = ({ projectId }) => {
           console.log('📦 API Response:', response)
           if (response.success && response.data) {
             console.log(`✅ Successfully loaded ${response.data.length} projects`)
-            setProjects(response.data)
+            setProjects(Array.isArray(response.data) ? response.data : [response.data])
           } else {
             console.error('❌ API returned success=false or no data:', response)
             setError(isRTL ? 'فشل في تحميل المشاريع' : 'Failed to load projects')

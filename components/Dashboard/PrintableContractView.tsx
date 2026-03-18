@@ -2,6 +2,7 @@
 
 import { forwardRef } from 'react'
 import { createPortal } from 'react-dom'
+import Image from 'next/image'
 import styles from './PrintableContractView.module.css'
 import { generateContractHTML } from '@/utils/contractHTML'
 import { generateMandatoryClauses } from '@/utils/mandatoryClauses'
@@ -360,7 +361,14 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
                 <div className={styles.sigLabel}>توقيع الطرف الثاني</div>
                 <div className={styles.sigArea}>
                   {clientSignatureImage ? (
-                    <img src={clientSignatureImage || bufferToDataUrl(project?.signature_white || project?.signature_blue || project?.signature_black)} alt="Client Signature" style={{ maxWidth: '100%', maxHeight: '50px', objectFit: 'contain' }} />
+                    <Image
+                      src={clientSignatureImage || bufferToDataUrl(project?.signature_white || project?.signature_blue || project?.signature_black) || ''}
+                      alt="Client Signature"
+                      width={200}
+                      height={50}
+                      style={{ maxWidth: '100%', maxHeight: '50px', objectFit: 'contain', height: 'auto', width: 'auto' }}
+                      unoptimized
+                    />
                   ) : (
                     <div className={styles.sigClientName}>{clientName}</div>
                   )}

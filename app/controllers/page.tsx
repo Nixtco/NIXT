@@ -120,10 +120,11 @@ interface ProjectAdmin {
 // Available permissions list
 const AVAILABLE_PERMISSIONS = [
   { key: 'view_users', label: 'View Users', labelAr: 'عرض المستخدمين', description: 'Allow viewing user list', descriptionAr: 'السماح بعرض قائمة المستخدمين' },
-  { key: 'view_cars', label: 'View Cars', labelAr: 'عرض السيارات', description: 'Allow viewing car list', descriptionAr: 'السماح بعرض قائمة السيارات' },
-  { key: 'create_cars', label: 'Add Cars', labelAr: 'إضافة سيارات', description: 'Allow adding new cars', descriptionAr: 'السماح بإضافة سيارات جديدة' },
-  { key: 'update_cars', label: 'Edit Cars', labelAr: 'تعديل السيارات', description: 'Allow editing car data', descriptionAr: 'السماح بتعديل بيانات السيارات' },
-  { key: 'delete_cars', label: 'Delete Cars', labelAr: 'حذف السيارات', description: 'Allow deleting cars', descriptionAr: 'السماح بحذف السيارات' }
+  { key: 'view_contracts', label: 'View Contracts', labelAr: 'عرض العقود', description: 'Allow viewing contract list', descriptionAr: 'السماح بعرض قائمة العقود' },
+  { key: 'create_contracts', label: 'Add Contracts', labelAr: 'إضافة عقود', description: 'Allow adding new contracts', descriptionAr: 'السماح بإضافة عقود جديدة' },
+  { key: 'update_contracts', label: 'Edit Contracts', labelAr: 'تعديل العقود', description: 'Allow editing contract data', descriptionAr: 'السماح بتعديل بيانات العقود' },
+  { key: 'delete_contracts', label: 'Delete Contracts', labelAr: 'حذف العقود', description: 'Allow deleting contracts', descriptionAr: 'السماح بحذف العقود' },
+  { key: 'view_projects', label: 'View Projects', labelAr: 'عرض المشاريع', description: 'Allow viewing project list', descriptionAr: 'السماح بعرض قائمة المشاريع' },
 ]
 
 interface Activity {

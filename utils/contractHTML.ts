@@ -172,7 +172,7 @@ export function generateContractHTML({
     .sig-box { flex: 1; text-align: center; }
     .sig-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
     .sig-area { height: 85px; border: 2px dashed #d4c8a0; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; background: #fefcf6; }
-    .stamp { border: 2px solid ${accent}; padding: 8px 25px; border-radius: 8px; background: rgba(${accentRgb},0.06); text-align: center; }
+    .stamp { border: 2px solid ${accent}; padding: 0px 40px; border-radius: 8px; background: rgba(${accentRgb},0.06); text-align: center; display: flex; flex-direction: column; justify-content: space-between; height: 90%; opacity: .3; line-height: 1; }
     .stamp-name { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: ${accent}; }
     .stamp-sub { font-size: 8px; letter-spacing: 2px; color: ${accentDark}; text-transform: uppercase; }
     .sig-client { font-size: 17px; font-weight: 700; color: #1a1a2e; font-style: italic; }

@@ -2488,7 +2488,7 @@ function ControllersContent() {
                     </select>
                   </div>
                   <div className={styles.formGroup}>
-                    <label>{isRTL ? 'السعر (ر.س)' : 'Price (USD)'} *</label>
+                    <label>{isRTL ? 'السعر (دولار)' : 'Price (USD)'} *</label>
                     <input
                       type="number"
                       min="0"
@@ -2595,7 +2595,7 @@ function ControllersContent() {
                       />
                     </div>
                     <div className={styles.formGroup}>
-                      <label>{isRTL ? 'السعر (ر.س)' : 'Price (USD)'}</label>
+                      <label>{isRTL ? 'السعر (دولار)' : 'Price (USD)'}</label>
                       <input
                         type="number"
                         min="0"
@@ -2607,7 +2607,7 @@ function ControllersContent() {
                       />
                     </div>
                     <div className={styles.formGroup}>
-                      <label>{isRTL ? 'المصروف (ر.س)' : 'Spent (USD)'}</label>
+                      <label>{isRTL ? 'المصروف (دولار)' : 'Spent (USD)'}</label>
                       <input
                         type="number"
                         min="0"
@@ -2948,7 +2948,7 @@ function ControllersContent() {
                       </div>
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
-                          {isRTL ? 'الميزانية (ر.س)' : 'Budget (USD)'}
+                          {isRTL ? 'الميزانية (دولار)' : 'Budget (USD)'}
                         </label>
                         <input
                           type="number"
@@ -2962,7 +2962,7 @@ function ControllersContent() {
                       </div>
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
-                          {isRTL ? 'المصروف (ر.س)' : 'Spent (USD)'}
+                          {isRTL ? 'المصروف (دولار)' : 'Spent (USD)'}
                         </label>
                         <input
                           type="number"

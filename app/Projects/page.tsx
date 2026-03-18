@@ -934,7 +934,7 @@ function ProjectsContent() {
                 />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'السعر (ر.س) *' : 'Price (USD) *'}</label>
+                <label>{isRTL ? 'السعر (دولار) *' : 'Price (USD) *'}</label>
                 <input
                   className={styles.formInput}
                   type="number"
@@ -1042,11 +1042,11 @@ function ProjectsContent() {
                 <input className={styles.formInput} type="text" value={editName} onChange={(e) => setEditName(e.target.value)} disabled={editingProject.has_signed} style={{ opacity: editingProject.has_signed ? 0.5 : 1 }} />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'السعر (ر.س)' : 'Price (USD)'}</label>
+                <label>{isRTL ? 'السعر (دولار)' : 'Price (USD)'}</label>
                 <input className={styles.formInput} type="number" min="0" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} disabled={editingProject.has_signed} style={{ opacity: editingProject.has_signed ? 0.5 : 1 }} />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'المصروف (ر.س)' : 'Spent (USD)'}</label>
+                <label>{isRTL ? 'المصروف (دولار)' : 'Spent (USD)'}</label>
                 <input className={styles.formInput} type="number" min="0" value={editSpent} onChange={(e) => setEditSpent(e.target.value)} />
               </div>
               <div className={styles.formGroup}>

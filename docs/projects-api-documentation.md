@@ -28,8 +28,10 @@ This documentation covers all API endpoints related to projects management. This
 13. [إضافة عضو فريق](#13-add-team-member)
 14. [إزالة عضو فريق](#14-remove-team-member)
 15. [حذف مشروع](#15-delete-project)
-16. [هيكل نموذج المشاريع](#16-project-model-structure)
-17. [ملاحظات مهمة](#17-important-notes)
+16. [توقيع بند المشروع](#16-sign-project)
+17. [هيكل نموذج المشاريع](#17-project-model-structure)
+18. [آلية حساب الديدلاين](#18-deadline-calculation)
+19. [ملاحظات مهمة](#19-important-notes)
 
 ---
 
@@ -47,7 +49,7 @@ This documentation covers all API endpoints related to projects management. This
 | offset | number | اختياري | عدد النتائج المتجاوزة |
 | order | string (JSON) | اختياري | ترتيب النتائج (مصفوفة JSON) |
 | search | string | اختياري | البحث في اسم المشروع |
-| status | string | اختياري | تصفية حسب الحالة (`active`, `pending`, `completed`, `onhold`) |
+| status | string | اختياري | تصفية حسب الحالة (`active`, `pending`, `completed`, `onhold`, `cancelled`) |
 | priority | string | اختياري | تصفية حسب الأولوية (`low`, `medium`, `high`, `urgent`) |
 | user_id | string | اختياري | تصفية حسب معرف المستخدم (UUID) |
 
@@ -95,8 +97,12 @@ Content-Type: application/json
       "spent": 2000.00,
       "priority": "high",
       "status": "active",
-      "deadline": "2026-06-01T00:00:00.000Z",
+      "duration": 45,
       "team": ["770e8400-e29b-41d4-a716-446655440002"],
+      "start_date": "2026-02-20T00:00:00.000Z",
+      "status_changes": [
+        { "status": "active", "timestamp": "2026-02-20T10:00:00.000Z", "reason": "بدء العمل" }
+      ],
       "created_at": "2026-02-19T10:30:00.000Z",
       "updated_at": "2026-02-19T10:30:00.000Z"
     }
@@ -202,8 +208,10 @@ Content-Type: application/json
       "spent": 0,
       "priority": "medium",
       "status": "pending",
-      "deadline": "2026-06-01T00:00:00.000Z",
+      "duration": 45,
       "team": [],
+      "start_date": null,
+      "status_changes": [],
       "created_at": "2026-02-19T10:30:00.000Z",
       "updated_at": "2026-02-19T10:30:00.000Z"
     }
@@ -260,8 +268,12 @@ Content-Type: application/json
       "spent": 2000.00,
       "priority": "high",
       "status": "active",
-      "deadline": "2026-06-01T00:00:00.000Z",
+      "duration": 45,
       "team": ["770e8400-e29b-41d4-a716-446655440002"],
+      "start_date": "2026-02-20T00:00:00.000Z",
+      "status_changes": [
+        { "status": "active", "timestamp": "2026-02-20T10:00:00.000Z", "reason": "" }
+      ],
       "created_at": "2026-02-19T10:30:00.000Z",
       "updated_at": "2026-02-19T10:30:00.000Z"
     }
@@ -311,8 +323,12 @@ Content-Type: application/json
     "spent": 2000.00,
     "priority": "high",
     "status": "active",
-    "deadline": "2026-06-01T00:00:00.000Z",
+    "duration": 45,
     "team": ["770e8400-e29b-41d4-a716-446655440002"],
+    "start_date": "2026-02-20T00:00:00.000Z",
+    "status_changes": [
+      { "status": "active", "timestamp": "2026-02-20T10:00:00.000Z", "reason": "" }
+    ],
     "created_at": "2026-02-19T10:30:00.000Z",
     "updated_at": "2026-02-19T10:30:00.000Z"
   }
@@ -344,9 +360,10 @@ Content-Type: application/json
 | price | number | نعم | - | سعر المشروع (الحد الأدنى 0) |
 | spent | number | اختياري | `0` | المبلغ المصروف (الحد الأدنى 0) |
 | priority | string | اختياري | `"medium"` | الأولوية (`low`, `medium`, `high`, `urgent`) |
-| status | string | اختياري | `"pending"` | الحالة (`active`, `pending`, `completed`, `onhold`) |
-| deadline | date (ISO) | نعم | - | الموعد النهائي للمشروع |
+| status | string | اختياري | `"pending"` | الحالة (`active`, `pending`, `completed`, `onhold`, `cancelled`) |
+| duration | number | اختياري | `45` | مدة المشروع بالأيام (عدد صحيح، الحد الأدنى 1) |
 | team | string[] (UUID) | اختياري | `[]` | معرفات المشرفين في الفريق |
+| start_date | string (ISO 8601) | اختياري | `null` | تاريخ بدء المشروع (لا يمكن تعديله بعد تعيينه) |
 
 ### هيكل عنصر التقدم | Progress Item Structure
 | الحقل | النوع | مطلوب | الوصف |
@@ -371,8 +388,9 @@ Content-Type: application/json
   "price": 5000,
   "priority": "high",
   "status": "active",
-  "deadline": "2026-06-01T00:00:00.000Z",
-  "team": ["770e8400-e29b-41d4-a716-446655440002"]
+  "duration": 60,
+  "team": ["770e8400-e29b-41d4-a716-446655440002"],
+  "start_date": "2026-03-12T00:00:00.000Z"
 }
 ```
 
@@ -384,8 +402,7 @@ Content-Type: application/json
 {
   "name": "مشروع جديد",
   "user_id": "660e8400-e29b-41d4-a716-446655440001",
-  "price": 3000,
-  "deadline": "2026-08-01T00:00:00.000Z"
+  "price": 3000
 }
 ```
 
@@ -407,8 +424,10 @@ Content-Type: application/json
     "spent": 0,
     "priority": "high",
     "status": "active",
-    "deadline": "2026-06-01T00:00:00.000Z",
+    "duration": 60,
     "team": ["770e8400-e29b-41d4-a716-446655440002"],
+    "start_date": "2026-03-12T00:00:00.000Z",
+    "status_changes": [],
     "created_at": "2026-02-19T10:30:00.000Z",
     "updated_at": "2026-02-19T10:30:00.000Z"
   }
@@ -425,10 +444,10 @@ Content-Type: application/json
 | price | مفقود | السعر مطلوب |
 | price | أقل من صفر | السعر يجب أن يكون 0 على الأقل |
 | priority | قيمة غير صالحة | الأولوية يجب أن تكون واحدة من: low, medium, high, urgent |
-| status | قيمة غير صالحة | الحالة يجب أن تكون واحدة من: active, pending, completed, onhold |
-| deadline | مفقود | الموعد النهائي مطلوب |
-| deadline | تنسيق خاطئ | الموعد النهائي يجب أن يكون بصيغة ISO |
+| status | قيمة غير صالحة | الحالة يجب أن تكون واحدة من: active, pending, completed, onhold, cancelled |
+| duration | قيمة غير صالحة | مدة المشروع يجب أن تكون عدداً صحيحاً (1 على الأقل) |
 | team[i] | تنسيق خاطئ | كل معرف مشرف يجب أن يكون UUID صالح |
+| start_date | تنسيق خاطئ | تاريخ بدء المشروع يجب أن يكون بصيغة ISO 8601 |
 
 ### رموز الاستجابة | Response Codes
 - `201 Created` - تم إنشاء المشروع بنجاح
@@ -458,11 +477,19 @@ Content-Type: application/json
 | price | number | اختياري | سعر المشروع (الحد الأدنى 0) |
 | spent | number | اختياري | المبلغ المصروف (الحد الأدنى 0) |
 | priority | string | اختياري | الأولوية (`low`, `medium`, `high`, `urgent`) |
-| status | string | اختياري | الحالة (`active`, `pending`, `completed`, `onhold`) |
-| deadline | date (ISO) | اختياري | الموعد النهائي |
+| status | string | اختياري | الحالة (`active`, `pending`, `completed`, `onhold`, `cancelled`) |
+| duration | number | اختياري | مدة المشروع بالأيام (عدد صحيح، الحد الأدنى 1) |
 | team | string[] (UUID) | اختياري | معرفات المشرفين في الفريق |
+| start_date | string (ISO 8601) | اختياري | تاريخ بدء المشروع (لا يمكن تعديله إذا كان معيّناً مسبقاً) |
+| status_reason | string | اختياري | سبب تغيير الحالة (يُسجّل تلقائياً في status_changes، الحد الأقصى 500 حرف) |
 
 > **ملاحظة:** يجب توفير حقل واحد على الأقل للتحديث.
+
+> **ملاحظة مهمة:** إذا كان العقد المرتبط بالمشروع تم التوقيع عليه، فلا يمكن تعديل الحقول التالية: `name`، `price`، `has_signed`. سيُرجع خطأ `400 Bad Request` في حال محاولة تعديلها.
+
+> **ملاحظة مهمة:** حقل `start_date` لا يمكن تعديله بعد تعيين قيمة له. محاولة التعديل ستُرجع خطأ `400 Bad Request`.
+
+> **ملاحظة:** عند تغيير `status`، يتم تسجيل التغيير تلقائياً في حقل `status_changes`. يمكن تمرير `status_reason` لتسجيل سبب التغيير.
 
 ### مثال على الطلب | Request Example
 ```http
@@ -472,7 +499,8 @@ Content-Type: application/json
 {
   "status": "completed",
   "spent": 4500,
-  "priority": "medium"
+  "priority": "medium",
+  "status_reason": "تم إنهاء جميع المراحل"
 }
 ```
 
@@ -837,7 +865,42 @@ Content-Type: application/json
 
 ---
 
-## 16. هيكل نموذج المشاريع | Project Model Structure
+## 16. توقيع بند المشروع | Sign Project
+
+### معلومات الطلب | Request Information
+- **المسار | Route:** `PATCH /api/v1/projects/:id/sign`
+- **الوصف | Description:** تسجيل توقيع المستخدم على بند المشروع (يضبط has_signed = true)
+- **مستوى الوصول | Access Level:** Private - أي مستخدم مُصادق
+
+### معاملات المسار | Path Parameters
+| المعامل | النوع | مطلوب | الوصف |
+|---------|------|-------|-------|
+| id | string (UUID) | نعم | معرف المشروع |
+
+### مثال على الطلب | Request Example
+```http
+PATCH /api/v1/projects/550e8400-e29b-41d4-a716-446655440000/sign
+Content-Type: application/json
+```
+
+### الاستجابة المتوقعة | Expected Response
+```json
+{
+  "success": true,
+  "data": {
+    "has_signed": true
+  }
+}
+```
+
+### رموز الاستجابة | Response Codes
+- `200 OK` - تم تسجيل التوقيع بنجاح
+- `400 Bad Request` - معرف المشروع غير صالح
+- `500 Internal Server Error` - خطأ في الخادم
+
+---
+
+## 17. هيكل نموذج المشاريع | Project Model Structure
 
 ### جدول `projects`
 
@@ -851,9 +914,11 @@ Content-Type: application/json
 | price | DECIMAL(12,2) | نعم | `0` | سعر المشروع |
 | spent | DECIMAL(12,2) | نعم | `0` | المبلغ المصروف |
 | priority | ENUM | نعم | `"medium"` | الأولوية (`low`, `medium`, `high`, `urgent`) |
-| status | ENUM | نعم | `"pending"` | الحالة (`active`, `pending`, `completed`, `onhold`) |
-| deadline | DATE | نعم | - | الموعد النهائي للمشروع |
+| status | ENUM | نعم | `"pending"` | الحالة (`active`, `pending`, `completed`, `onhold`, `cancelled`) |
+| duration | INTEGER | نعم | `45` | مدة المشروع بالأيام |
 | team | UUID[] | نعم | `[]` | معرفات المشرفين في الفريق |
+| start_date | TIMESTAMPTZ | لا | `null` | تاريخ بدء المشروع (لا يمكن تعديله بعد تعيينه) |
+| status_changes | JSONB | نعم | `[]` | سجل تغييرات الحالة `[{status, timestamp, reason}]` |
 | created_at | TIMESTAMP | نعم | تلقائي | تاريخ إنشاء السجل |
 | updated_at | TIMESTAMP | نعم | تلقائي | تاريخ آخر تحديث |
 
@@ -864,6 +929,14 @@ Content-Type: application/json
 | id | string | نعم | معرف عنصر التقدم (1-100 حرف) |
 | title | string | نعم | عنوان المرحلة (1-255 حرف) |
 | percent | number | نعم | نسبة الإنجاز (0-100) |
+
+### هيكل سجل تغيير الحالة | Status Change Item Structure
+
+| الحقل | النوع | مطلوب | الوصف |
+|-------|------|-------|-------|
+| status | string | نعم | الحالة الجديدة (`active`, `pending`, `completed`, `onhold`, `cancelled`) |
+| timestamp | string (ISO 8601) | نعم | وقت التغيير (يُسجّل تلقائياً) |
+| reason | string | نعم | سبب التغيير (يمكن أن يكون فارغاً) |
 
 ### القيم المسموحة | Allowed Values
 
@@ -882,6 +955,7 @@ Content-Type: application/json
 | `pending` | معلق - في الانتظار |
 | `completed` | مكتمل |
 | `onhold` | متوقف مؤقتاً |
+| `cancelled` | ملغى |
 
 ### الفهارس | Indexes
 
@@ -890,11 +964,52 @@ Content-Type: application/json
 | idx_project_user_id | user_id | لتسريع البحث حسب المستخدم |
 | idx_project_status | status | لتسريع التصفية حسب الحالة |
 | idx_project_priority | priority | لتسريع التصفية حسب الأولوية |
-| idx_project_deadline | deadline | لتسريع الترتيب حسب الموعد النهائي |
+| idx_project_duration | duration | لتسريع الترتيب حسب المدة |
+| idx_project_start_date | start_date | لتسريع البحث حسب تاريخ البدء |
 
 ---
 
-## 17. ملاحظات مهمة | Important Notes
+## 18. آلية حساب الديدلاين | Deadline Calculation
+
+### المبدأ | Principle
+
+يتم حساب الديدلاين بناءً على **الأيام الفعّالة فقط** (الأيام التي كان فيها المشروع بحالة `active`). الفترات التي يكون فيها المشروع `onhold` أو `cancelled` **لا تُحسب** من المدة.
+
+The deadline is calculated based on **active days only** (days the project was in `active` status). Periods when the project is `onhold` or `cancelled` are **not counted** towards the duration.
+
+### آلية العمل | How it Works
+
+1. يتم تسجيل كل تغيير حالة تلقائياً في `status_changes` مع الوقت والسبب.
+2. يتم حساب الأيام الفعّالة بجمع الفترات بين كل تغيير إلى `active` والتغيير التالي إلى `onhold`/`cancelled`/`completed`.
+3. الديدلاين = اليوم الحالي + (المدة الإجمالية - الأيام الفعّالة المستهلكة).
+
+### مثال | Example
+
+```
+المدة (duration): 45 يوم
+تاريخ البدء (start_date): 2026-01-01
+
+status_changes:
+  1. { status: "active",    timestamp: "2026-01-01", reason: "بدء العمل" }       → بدأ العد
+  2. { status: "onhold",    timestamp: "2026-01-16", reason: "انتظار العميل" }   → 15 يوم active
+  3. { status: "active",    timestamp: "2026-02-01", reason: "استئناف العمل" }  → بدأ العد مجدداً
+  4. { status: "onhold",    timestamp: "2026-02-11", reason: "مراجعة" }        → 10 أيام active
+  5. { status: "active",    timestamp: "2026-02-20", reason: "استئناف" }        → بدأ العد مجدداً
+
+الأيام الفعّالة المستهلكة: 15 + 10 = 25 يوم
+الأيام المتبقية: 45 - 25 = 20 يوم
+الديدلاين: 2026-02-20 + 20 = 2026-03-12
+```
+
+### ملاحظات | Notes
+- **`start_date` غير قابل للتعديل** بعد تعيينه لأول مرة (محاولة التعديل تُرجع خطأ 400).
+- **`status_changes`** يُدار تلقائياً — لا يحتاج المستخدم إرساله في الطلب. يُضاف إليه تلقائياً عند تغيير `status`.
+- يمكن تمرير `status_reason` مع تغيير الحالة لتسجيل سبب التغيير (اختياري، الحد الأقصى 500 حرف).
+- إذا كان المشروع `onhold` أو `cancelled`، لا يمكن تحديد ديدلاين دقيق (يعتمد على وقت إعادة التشغيل).
+
+---
+
+## 19. ملاحظات مهمة | Important Notes
 
 ### الصلاحيات | Permissions
 - جميع المسارات تتطلب مصادقة (Authentication).
@@ -923,11 +1038,30 @@ Content-Type: application/json
 - اسم المشروع يجب أن يكون بين **1 و 255 حرف**.
 - السعر والمبلغ المصروف يجب أن يكونا **أرقام غير سالبة** (دقة عشرية 12,2).
 - نسبة التقدم يجب أن تكون بين **0 و 100**.
-- الموعد النهائي يجب أن يكون **تاريخ بصيغة ISO**.
+- مدة المشروع (`duration`) يجب أن تكون **عدداً صحيحاً أكبر من 0**.
+
+### حماية الحقول عند توقيع العقد | Field Protection When Contract is Signed
+- إذا كان العقد المرتبط بالمشروع قد تم التوقيع عليه (`signed_at` ليس `null`)، فلا يمكن تعديل الحقول التالية في المشروع:
+  - `name` - اسم المشروع
+  - `price` - سعر المشروع
+  - `has_signed` - حالة التوقيع
+  - `id` - معرف المشروع (ممنوع دائماً)
+  - `user_id` - معرف المستخدم (ممنوع دائماً)
+- محاولة تعديل هذه الحقول ستُرجع خطأ `400 Bad Request`.
+
+### حماية تاريخ البدء | Start Date Protection
+- حقل `start_date` غير قابل للتعديل بعد تعيين قيمة له لأول مرة.
+- محاولة تعديله بعد ذلك ستُرجع خطأ `400 Bad Request` مع رسالة: "لا يمكن تعديل تاريخ بدء المشروع بعد تعيينه".
+- هذا القيد لمنع التلاعب بتاريخ بدء المشروع لأغراض احتيالية.
+
+### سجل تغييرات الحالة | Status Changes Log
+- يتم تسجيل كل تغيير حالة تلقائياً في حقل `status_changes` مع الوقت والسبب.
+- يمكن تمرير `status_reason` عند تغيير الحالة لتوثيق سبب التغيير.
+- هذا السجل يُستخدم لحساب الديدلاين بدقة بناءً على الأيام الفعّالة فقط.
 
 ### البحث والتصفية | Search & Filtering
 - البحث باستخدام `search` يبحث في اسم المشروع (بحث غير حساس لحالة الأحرف).
-- التصفية حسب `status` تدعم: `active`, `pending`, `completed`, `onhold`.
+- التصفية حسب `status` تدعم: `active`, `pending`, `completed`, `onhold`, `cancelled`.
 - التصفية حسب `priority` تدعم: `low`, `medium`, `high`, `urgent`.
 - التصفية حسب `user_id` تجلب مشاريع مستخدم محدد.
 

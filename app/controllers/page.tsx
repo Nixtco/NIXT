@@ -55,6 +55,21 @@ import {
   deleteUser as apiDeleteUser,
 } from '../users/apiFunctions'
 
+import {
+  type Contract,
+  type CreateContractPayload,
+  type UpdateContractPayload,
+  type ContractClause,
+  type ProjectDetail,
+  getContractsByProjectId,
+  createContract,
+  updateContract,
+  deleteContract as apiDeleteContract,
+  changeContractStatus,
+} from '../dashboard/contract/[contractNumber]/apiFunctions'
+
+import { generateMandatoryClauses, isMandatoryClause, MANDATORY_CLAUSES_COUNT } from '@/utils/mandatoryClauses'
+
 // Define interfaces for type safety
 // Client interface now uses API User data
 interface Client extends APIUser {
@@ -156,7 +171,9 @@ function ControllersContent() {
   const [editProjectPrice, setEditProjectPrice] = useState(0)
   const [editProjectSpent, setEditProjectSpent] = useState(0)
   const [editProjectStatus, setEditProjectStatus] = useState<APIProject['status']>('active')
-  const [editProjectDeadline, setEditProjectDeadline] = useState('')
+  const [editProjectDuration, setEditProjectDuration] = useState('')
+  const [editProjectStartDate, setEditProjectStartDate] = useState('')
+  const [editProjectStatusReason, setEditProjectStatusReason] = useState('')
   const [editProjectPriority, setEditProjectPriority] = useState<APIProject['priority']>('medium')
   const [editProjectHasSigned, setEditProjectHasSigned] = useState(false)
 
@@ -179,12 +196,46 @@ function ControllersContent() {
   const [newTeamMemberId, setNewTeamMemberId] = useState('')
   const [availableAdmins, setAvailableAdmins] = useState<ProjectAdmin[]>([])
 
+  // Contract management state
+  const [showContractDialog, setShowContractDialog] = useState(false)
+  const [contractDialogProject, setContractDialogProject] = useState<APIProject | null>(null)
+  const [contractData, setContractData] = useState<Contract | null>(null)
+  const [contractLoading, setContractLoading] = useState(false)
+  const [contractError, setContractError] = useState<string | null>(null)
+  const [contractSuccess, setContractSuccess] = useState<string | null>(null)
+  const [contractActionLoading, setContractActionLoading] = useState(false)
+  // Contract edit fields
+  const [editContractClientName, setEditContractClientName] = useState('')
+  const [editContractClientEmail, setEditContractClientEmail] = useState('')
+  const [editContractDescription, setEditContractDescription] = useState('')
+  const [editContractPrice, setEditContractPrice] = useState(0)
+  const [editContractPayNumber, setEditContractPayNumber] = useState(2)
+  const [editContractStatus, setEditContractStatus] = useState<Contract['status']>('pending')
+  const [editContractClauses, setEditContractClauses] = useState<ContractClause[]>([])
+  const [editContractProjectDetails, setEditContractProjectDetails] = useState<ProjectDetail[]>([])
+  const [editContractProjectDuration, setEditContractProjectDuration] = useState<number | null>(null)
+  const [editContractProjectDurationUnit, setEditContractProjectDurationUnit] = useState<string | null>(null)
+  const [editContractRevisionsAllowed, setEditContractRevisionsAllowed] = useState<number | null>(null)
+  const [editContractWarrantyPeriod, setEditContractWarrantyPeriod] = useState<number | null>(null)
+  const [editContractAutoCancelDays, setEditContractAutoCancelDays] = useState<number | null>(null)
+  const [editContractProgressTolerance, setEditContractProgressTolerance] = useState<number | null>(null)
+  const [editContractDelayCompensation, setEditContractDelayCompensation] = useState<number | null>(null)
+  const [editContractClientFaultRefund, setEditContractClientFaultRefund] = useState<number | null>(null)
+  const [editContractProgressTimelineLink, setEditContractProgressTimelineLink] = useState<string | null>(null)
+  const [showAddClauseForm, setShowAddClauseForm] = useState(false)
+  const [newClauseTitle, setNewClauseTitle] = useState('')
+  const [newClauseDescription, setNewClauseDescription] = useState('')
+  const [showAddDetailForm, setShowAddDetailForm] = useState(false)
+  const [newDetailTitle, setNewDetailTitle] = useState('')
+  const [newDetailDescription, setNewDetailDescription] = useState('')
+
   // Add project form state
   const [showAddProjectForm, setShowAddProjectForm] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectUserId, setNewProjectUserId] = useState('')
   const [newProjectPrice, setNewProjectPrice] = useState('')
-  const [newProjectDeadline, setNewProjectDeadline] = useState('')
+  const [newProjectDuration, setNewProjectDuration] = useState('')
+  const [newProjectStartDate, setNewProjectStartDate] = useState('')
   const [newProjectPriority, setNewProjectPriority] = useState<APIProject['priority']>('medium')
   const [newProjectStatus, setNewProjectStatus] = useState<APIProject['status']>('pending')
 
@@ -605,7 +656,9 @@ function ControllersContent() {
       spent: project.spent || 0,
       status: project.status || 'pending',
       priority: project.priority || 'medium',
-      deadline: project.deadline || new Date().toISOString(),
+      duration: project.duration || 45,
+      start_date: project.start_date || null,
+      status_changes: project.status_changes || [],
       progress: project.progress || [],
       progress_completed: project.progress_completed || [],
       team: project.team || [],
@@ -641,7 +694,9 @@ function ControllersContent() {
         setEditProjectPrice(normalized.price || 0)
         setEditProjectSpent(normalized.spent || 0)
         setEditProjectStatus(normalized.status || 'pending')
-        setEditProjectDeadline(normalized.deadline ? normalized.deadline.split('T')[0] : '')
+        setEditProjectDuration(normalized.duration?.toString() || '')
+        setEditProjectStartDate(normalized.start_date ? normalized.start_date.split('T')[0] : '')
+        setEditProjectStatusReason('')
         setEditProjectPriority(normalized.priority || 'medium')
         setEditProjectHasSigned(normalized.has_signed ?? false)
       } else {
@@ -667,16 +722,23 @@ function ControllersContent() {
       setProjectActionLoading(true)
       const payload: UpdateProjectPayload = {}
       
-      // Check what changed
-      if (editProjectName !== viewingProject.name) payload.name = editProjectName
-      if (editProjectPrice !== viewingProject.price) payload.price = editProjectPrice
+      // Check what changed - respect contract-signed field protection
+      const isSigned = viewingProject.has_signed
+      if (!isSigned && editProjectName !== viewingProject.name) payload.name = editProjectName
+      if (!isSigned && editProjectPrice !== viewingProject.price) payload.price = editProjectPrice
       if (editProjectSpent !== viewingProject.spent) payload.spent = editProjectSpent
-      if (editProjectDeadline && viewingProject.deadline && editProjectDeadline !== viewingProject.deadline.split('T')[0]) {
-        payload.deadline = new Date(editProjectDeadline).toISOString()
+      if (editProjectDuration && parseInt(editProjectDuration) !== viewingProject.duration) {
+        payload.duration = parseInt(editProjectDuration)
+      }
+      if (editProjectStartDate && !viewingProject.start_date) {
+        payload.start_date = new Date(editProjectStartDate).toISOString()
       }
       if (editProjectPriority !== viewingProject.priority) payload.priority = editProjectPriority
-      if (editProjectStatus !== viewingProject.status) payload.status = editProjectStatus
-      if (editProjectHasSigned !== (viewingProject.has_signed ?? false)) payload.has_signed = editProjectHasSigned
+      if (editProjectStatus !== viewingProject.status) {
+        payload.status = editProjectStatus
+        if (editProjectStatusReason) payload.status_reason = editProjectStatusReason
+      }
+      if (!isSigned && editProjectHasSigned !== (viewingProject.has_signed ?? false)) payload.has_signed = editProjectHasSigned
 
       // Only update if there are changes
       if (Object.keys(payload).length > 0) {
@@ -696,8 +758,11 @@ function ControllersContent() {
               setEditProjectPrice(normalized.price || 0)
               setEditProjectSpent(normalized.spent || 0)
               setEditProjectStatus(normalized.status || 'pending')
-              setEditProjectDeadline(normalized.deadline ? normalized.deadline.split('T')[0] : '')
+              setEditProjectDuration(normalized.duration?.toString() || '')
+              setEditProjectStartDate(normalized.start_date ? normalized.start_date.split('T')[0] : '')
+              setEditProjectStatusReason('')
               setEditProjectPriority(normalized.priority || 'medium')
+              setEditProjectHasSigned(normalized.has_signed ?? false)
               setEditProjectHasSigned(normalized.has_signed ?? false)
             }
           }
@@ -719,7 +784,9 @@ function ControllersContent() {
     setEditProjectPrice(project.price || 0)
     setEditProjectSpent(project.spent || 0)
     setEditProjectStatus(project.status || 'pending')
-    setEditProjectDeadline(project.deadline ? project.deadline.split('T')[0] : '')
+    setEditProjectDuration(project.duration?.toString() || '')
+    setEditProjectStartDate(project.start_date ? project.start_date.split('T')[0] : '')
+    setEditProjectStatusReason('')
     setEditProjectPriority(project.priority || 'medium')
     setEditProjectHasSigned(project.has_signed ?? false)
   }
@@ -734,15 +801,22 @@ function ControllersContent() {
     try {
       setProjectActionLoading(true)
       const payload: UpdateProjectPayload = {}
-      if (editProjectName !== editingProject.name) payload.name = editProjectName
-      if (editProjectPrice !== editingProject.price) payload.price = editProjectPrice
+      const isSigned = editingProject.has_signed
+      if (!isSigned && editProjectName !== editingProject.name) payload.name = editProjectName
+      if (!isSigned && editProjectPrice !== editingProject.price) payload.price = editProjectPrice
       if (editProjectSpent !== editingProject.spent) payload.spent = editProjectSpent
-      if (editProjectDeadline && editingProject.deadline && editProjectDeadline !== editingProject.deadline.split('T')[0]) {
-        payload.deadline = new Date(editProjectDeadline).toISOString()
+      if (editProjectDuration && parseInt(editProjectDuration) !== editingProject.duration) {
+        payload.duration = parseInt(editProjectDuration)
+      }
+      if (editProjectStartDate && !editingProject.start_date) {
+        payload.start_date = new Date(editProjectStartDate).toISOString()
       }
       if (editProjectPriority !== editingProject.priority) payload.priority = editProjectPriority
-      if (editProjectStatus !== editingProject.status) payload.status = editProjectStatus
-      if (editProjectHasSigned !== (editingProject.has_signed ?? false)) payload.has_signed = editProjectHasSigned
+      if (editProjectStatus !== editingProject.status) {
+        payload.status = editProjectStatus
+        if (editProjectStatusReason) payload.status_reason = editProjectStatusReason
+      }
+      if (!isSigned && editProjectHasSigned !== (editingProject.has_signed ?? false)) payload.has_signed = editProjectHasSigned
 
       if (Object.keys(payload).length === 0) {
         setEditingProject(null)
@@ -772,25 +846,62 @@ function ControllersContent() {
 
   // Add new project via API
   const addNewProject = async () => {
-    if (!newProjectName || !newProjectUserId || !newProjectPrice || !newProjectDeadline) return
+    if (!newProjectName || !newProjectUserId || !newProjectPrice) return
     try {
       setProjectActionLoading(true)
       const payload: CreateProjectPayload = {
         name: newProjectName,
         user_id: newProjectUserId,
         price: parseFloat(newProjectPrice),
-        deadline: new Date(newProjectDeadline).toISOString(),
         priority: newProjectPriority,
         status: newProjectStatus,
+        ...(newProjectDuration ? { duration: parseInt(newProjectDuration) } : {}),
+        ...(newProjectStartDate ? { start_date: new Date(newProjectStartDate).toISOString() } : {}),
       }
       const res = await apiCreateProject(payload)
       if (res.success) {
-        showProjectSuccess(isRTL ? 'تم إنشاء المشروع بنجاح' : 'Project created successfully')
+        // Auto-create contract for the new project
+        try {
+          const client = clients.find(c => c.id === newProjectUserId)
+          const clientName = client?.display_name || `${client?.first_name || ''} ${client?.last_name || ''}`.trim() || client?.email || ''
+          const clientEmailAddr = client?.email || ''
+          const now = new Date()
+          const projectData = res.data
+          const contractNum = `NIXT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${projectData.id.substring(0, 6)}`
+          const projectPrice = parseFloat(newProjectPrice)
+
+          const contractPayload: CreateContractPayload = {
+            contract_number: contractNum,
+            user_id: newProjectUserId,
+            client_name: clientName,
+            client_email: clientEmailAddr,
+            project_name: newProjectName,
+            description: `عقد خاص بمشروع ${newProjectName}`,
+            clauses: [
+              { title: 'نطاق العمل', description: `يلتزم الطرف الأول بتنفيذ مشروع ${newProjectName} وفقاً للمواصفات المتفق عليها بين الطرفين.` },
+              { title: 'قيمة العقد', description: `قيمة العقد ${projectPrice} دولار أمريكي.` },
+              { title: 'جدول الدفع', description: 'يتم الدفع على دفعتين متساويتين: الأولى عند التوقيع والثانية عند التسليم.' },
+              { title: 'مدة التنفيذ', description: `مدة تنفيذ المشروع ${newProjectDuration || 45} يوم عمل.` },
+              { title: 'حقوق الملكية', description: 'تنتقل جميع حقوق الملكية الفكرية للعميل بعد استكمال الدفع الكامل.' },
+            ],
+            price: projectPrice,
+            pay_number: 2,
+            status: 'pending',
+            project_id: projectData.id,
+          }
+          await createContract(contractPayload)
+          showProjectSuccess(isRTL ? 'تم إنشاء المشروع والعقد بنجاح' : 'Project and contract created successfully')
+        } catch (contractErr) {
+          console.error('Failed to auto-create contract:', contractErr)
+          showProjectSuccess(isRTL ? 'تم إنشاء المشروع بنجاح (فشل إنشاء العقد تلقائياً)' : 'Project created (auto-contract creation failed)')
+        }
+
         setShowAddProjectForm(false)
         setNewProjectName('')
         setNewProjectUserId('')
         setNewProjectPrice('')
-        setNewProjectDeadline('')
+        setNewProjectDuration('')
+        setNewProjectStartDate('')
         setNewProjectPriority('medium')
         setNewProjectStatus('pending')
         await refreshProjectData()
@@ -1025,6 +1136,280 @@ function ControllersContent() {
     }
   }
 
+  // ==================== Contract Management Functions ====================
+
+  const showContractSuccessMsg = (msg: string) => {
+    setContractSuccess(msg)
+    setTimeout(() => setContractSuccess(null), 3000)
+  }
+
+  // Open contract dialog for a project
+  const openContractDialog = async (project: APIProject) => {
+    setContractDialogProject(project)
+    setShowContractDialog(true)
+    setContractError(null)
+    setContractData(null)
+    setContractLoading(true)
+
+    try {
+      const res = await getContractsByProjectId(project.id)
+      if (res.success && res.data.length > 0) {
+        const contract = res.data[0]
+        setContractData(contract)
+        // Initialize edit fields
+        setEditContractClientName(contract.client_name)
+        setEditContractClientEmail(contract.client_email)
+        setEditContractDescription(contract.description)
+        setEditContractPrice(contract.price)
+        setEditContractPayNumber(contract.pay_number)
+        setEditContractStatus(contract.status)
+        // Ensure mandatory clauses are always present
+        const existingClauses = contract.clauses || []
+        const mandatory = generateMandatoryClauses({
+          price: contract.price,
+          payNumber: contract.pay_number,
+          projectDuration: contract.project_duration,
+          projectDurationUnit: contract.project_duration_unit,
+          progressTolerance: contract.progress_tolerance,
+          autoCancelDays: contract.auto_cancel_days,
+          delayCompensation: contract.delay_compensation,
+          clientFaultRefund: contract.client_fault_refund,
+          warrantyPeriod: contract.warranty_period,
+          revisionsAllowed: contract.revisions_allowed,
+        })
+        const customClauses = existingClauses.filter(c => !isMandatoryClause(c.title))
+        setEditContractClauses([...mandatory, ...customClauses])
+        setEditContractProjectDetails(contract.project_details || [])
+        setEditContractProjectDuration(contract.project_duration ?? null)
+        setEditContractProjectDurationUnit(contract.project_duration_unit ?? null)
+        setEditContractRevisionsAllowed(contract.revisions_allowed ?? null)
+        setEditContractWarrantyPeriod(contract.warranty_period ?? null)
+        setEditContractAutoCancelDays(contract.auto_cancel_days ?? null)
+        setEditContractProgressTolerance(contract.progress_tolerance ?? null)
+        setEditContractDelayCompensation(contract.delay_compensation ?? null)
+        setEditContractClientFaultRefund(contract.client_fault_refund ?? null)
+        setEditContractProgressTimelineLink(contract.progress_timeline_link ?? null)
+      }
+    } catch (err) {
+      console.error('Error fetching contract:', err)
+    } finally {
+      setContractLoading(false)
+    }
+  }
+
+  // Save contract changes
+  const saveContractChanges = async () => {
+    if (!contractData || !contractDialogProject) return
+    try {
+      setContractActionLoading(true)
+      const payload: UpdateContractPayload = {}
+
+      if (editContractClientName !== contractData.client_name) payload.client_name = editContractClientName
+      if (editContractClientEmail !== contractData.client_email) payload.client_email = editContractClientEmail
+      if (editContractDescription !== contractData.description) payload.description = editContractDescription
+      if (editContractPrice !== contractData.price) payload.price = editContractPrice
+      if (editContractPayNumber !== contractData.pay_number) payload.pay_number = editContractPayNumber
+      if (editContractStatus !== contractData.status) payload.status = editContractStatus
+      // Always send clauses if they changed - ensure mandatory clauses are up-to-date
+      if (JSON.stringify(editContractClauses) !== JSON.stringify(contractData.clauses || [])) {
+        // Regenerate mandatory clauses with current contract values
+        const updatedMandatory = generateMandatoryClauses({
+          price: editContractPrice,
+          payNumber: editContractPayNumber,
+          projectDuration: editContractProjectDuration,
+          projectDurationUnit: editContractProjectDurationUnit,
+          progressTolerance: editContractProgressTolerance,
+          autoCancelDays: editContractAutoCancelDays,
+          delayCompensation: editContractDelayCompensation,
+          clientFaultRefund: editContractClientFaultRefund,
+          warrantyPeriod: editContractWarrantyPeriod,
+          revisionsAllowed: editContractRevisionsAllowed,
+        })
+        // Keep mandatory clauses + any custom (non-mandatory) clauses the user added
+        const customClauses = editContractClauses.filter(c => !isMandatoryClause(c.title))
+        payload.clauses = [...updatedMandatory, ...customClauses]
+      }
+      // Always send project_details if they changed
+      if (JSON.stringify(editContractProjectDetails) !== JSON.stringify(contractData.project_details || [])) {
+        payload.project_details = editContractProjectDetails
+      }
+      if (editContractProjectDuration !== (contractData.project_duration ?? null)) payload.project_duration = editContractProjectDuration ?? undefined
+      if (editContractProjectDurationUnit !== (contractData.project_duration_unit ?? null)) payload.project_duration_unit = editContractProjectDurationUnit ?? undefined
+      if (editContractRevisionsAllowed !== (contractData.revisions_allowed ?? null)) payload.revisions_allowed = editContractRevisionsAllowed ?? undefined
+      if (editContractWarrantyPeriod !== (contractData.warranty_period ?? null)) payload.warranty_period = editContractWarrantyPeriod ?? undefined
+      if (editContractAutoCancelDays !== (contractData.auto_cancel_days ?? null)) payload.auto_cancel_days = editContractAutoCancelDays ?? undefined
+      if (editContractProgressTolerance !== (contractData.progress_tolerance ?? null)) payload.progress_tolerance = editContractProgressTolerance ?? undefined
+      if (editContractDelayCompensation !== (contractData.delay_compensation ?? null)) payload.delay_compensation = editContractDelayCompensation ?? undefined
+      if (editContractClientFaultRefund !== (contractData.client_fault_refund ?? null)) payload.client_fault_refund = editContractClientFaultRefund ?? undefined
+      if (editContractProgressTimelineLink !== (contractData.progress_timeline_link ?? null)) payload.progress_timeline_link = editContractProgressTimelineLink ?? undefined
+
+      if (Object.keys(payload).length === 0) {
+        showContractSuccessMsg(isRTL ? 'لا توجد تغييرات' : 'No changes to save')
+        return
+      }
+
+      const res = await updateContract(contractData.id, payload)
+      if (res.success) {
+        showContractSuccessMsg(isRTL ? 'تم تحديث العقد بنجاح' : 'Contract updated successfully')
+        // Refresh contract data
+        const updated = await getContractsByProjectId(contractDialogProject.id)
+        if (updated.success && updated.data.length > 0) {
+          const c = updated.data[0]
+          setContractData(c)
+          setEditContractClientName(c.client_name)
+          setEditContractClientEmail(c.client_email)
+          setEditContractDescription(c.description)
+          setEditContractPrice(c.price)
+          setEditContractPayNumber(c.pay_number)
+          setEditContractStatus(c.status)
+          // Ensure mandatory clauses persist after reload
+          const reloadedMandatory = generateMandatoryClauses({
+            price: c.price,
+            payNumber: c.pay_number,
+            projectDuration: c.project_duration,
+            projectDurationUnit: c.project_duration_unit,
+            progressTolerance: c.progress_tolerance,
+            autoCancelDays: c.auto_cancel_days,
+            delayCompensation: c.delay_compensation,
+            clientFaultRefund: c.client_fault_refund,
+            warrantyPeriod: c.warranty_period,
+            revisionsAllowed: c.revisions_allowed,
+          })
+          const reloadedCustom = (c.clauses || []).filter(cl => !isMandatoryClause(cl.title))
+          setEditContractClauses([...reloadedMandatory, ...reloadedCustom])
+          setEditContractProjectDetails(c.project_details || [])
+          setEditContractProjectDuration(c.project_duration ?? null)
+          setEditContractProjectDurationUnit(c.project_duration_unit ?? null)
+          setEditContractRevisionsAllowed(c.revisions_allowed ?? null)
+          setEditContractWarrantyPeriod(c.warranty_period ?? null)
+          setEditContractAutoCancelDays(c.auto_cancel_days ?? null)
+          setEditContractProgressTolerance(c.progress_tolerance ?? null)
+          setEditContractDelayCompensation(c.delay_compensation ?? null)
+          setEditContractClientFaultRefund(c.client_fault_refund ?? null)
+          setEditContractProgressTimelineLink(c.progress_timeline_link ?? null)
+        }
+      }
+    } catch (err) {
+      setContractError(isRTL ? 'فشل في تحديث العقد' : 'Failed to update contract')
+    } finally {
+      setContractActionLoading(false)
+    }
+  }
+
+  // Delete contract
+  const handleDeleteContract = async () => {
+    if (!contractData || !contractDialogProject) return
+    if (!confirm(isRTL ? 'هل أنت متأكد من حذف هذا العقد؟' : 'Are you sure you want to delete this contract?')) return
+    try {
+      setContractActionLoading(true)
+      const res = await apiDeleteContract(contractData.id)
+      if (res.success) {
+        showContractSuccessMsg(isRTL ? 'تم حذف العقد بنجاح' : 'Contract deleted successfully')
+        setContractData(null)
+      }
+    } catch (err) {
+      setContractError(isRTL ? 'فشل في حذف العقد' : 'Failed to delete contract')
+    } finally {
+      setContractActionLoading(false)
+    }
+  }
+
+  // Create contract for project (manual)
+  const handleCreateContractForProject = async (project: APIProject) => {
+    // Find client info
+    const client = clients.find(c => c.id === project.user_id)
+    const clientName = client?.display_name || `${client?.first_name || ''} ${client?.last_name || ''}`.trim() || client?.email || ''
+    const clientEmailAddr = client?.email || ''
+    const now = new Date()
+    const contractNum = `NIXT-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${project.id.substring(0, 6)}`
+
+    try {
+      setContractActionLoading(true)
+      const mandatoryClauses = generateMandatoryClauses({
+        price: project.price,
+        payNumber: 2,
+        projectDuration: null,
+        projectDurationUnit: null,
+        progressTolerance: null,
+        autoCancelDays: null,
+        delayCompensation: null,
+        clientFaultRefund: null,
+        warrantyPeriod: null,
+        revisionsAllowed: null,
+      })
+      const payload: CreateContractPayload = {
+        contract_number: contractNum,
+        user_id: project.user_id,
+        client_name: clientName,
+        client_email: clientEmailAddr,
+        project_name: project.name,
+        description: `عقد خاص بمشروع ${project.name}`,
+        clauses: mandatoryClauses,
+        price: project.price,
+        pay_number: 2,
+        status: 'pending',
+        project_id: project.id,
+      }
+      const res = await createContract(payload)
+      if (res.success) {
+        showContractSuccessMsg(isRTL ? 'تم إنشاء العقد بنجاح' : 'Contract created successfully')
+        setContractData(res.data)
+        // Initialize edit fields
+        setEditContractClientName(res.data.client_name)
+        setEditContractClientEmail(res.data.client_email)
+        setEditContractDescription(res.data.description)
+        setEditContractPrice(res.data.price)
+        setEditContractPayNumber(res.data.pay_number)
+        setEditContractStatus(res.data.status)
+        setEditContractClauses(res.data.clauses || [])
+        setEditContractProjectDetails(res.data.project_details || [])
+        setEditContractProjectDuration(res.data.project_duration ?? null)
+        setEditContractProjectDurationUnit(res.data.project_duration_unit ?? null)
+        setEditContractRevisionsAllowed(res.data.revisions_allowed ?? null)
+        setEditContractWarrantyPeriod(res.data.warranty_period ?? null)
+        setEditContractAutoCancelDays(res.data.auto_cancel_days ?? null)
+        setEditContractProgressTolerance(res.data.progress_tolerance ?? null)
+        setEditContractDelayCompensation(res.data.delay_compensation ?? null)
+        setEditContractClientFaultRefund(res.data.client_fault_refund ?? null)
+        setEditContractProgressTimelineLink(res.data.progress_timeline_link ?? null)
+      }
+    } catch (err) {
+      setContractError(isRTL ? 'فشل في إنشاء العقد' : 'Failed to create contract')
+    } finally {
+      setContractActionLoading(false)
+    }
+  }
+
+  // Add clause to contract
+  const handleAddClause = () => {
+    if (!newClauseTitle.trim() || !newClauseDescription.trim()) return
+    setEditContractClauses(prev => [...prev, { title: newClauseTitle.trim(), description: newClauseDescription.trim() }])
+    setNewClauseTitle('')
+    setNewClauseDescription('')
+    setShowAddClauseForm(false)
+  }
+
+  // Remove clause (only non-mandatory)
+  const handleRemoveClause = (index: number) => {
+    const clause = editContractClauses[index]
+    if (clause && isMandatoryClause(clause.title)) return
+    setEditContractClauses(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Add project detail
+  const handleAddDetail = () => {
+    if (!newDetailTitle.trim() || !newDetailDescription.trim()) return
+    setEditContractProjectDetails(prev => [...prev, { title: newDetailTitle.trim(), description: newDetailDescription.trim() }])
+    setNewDetailTitle('')
+    setNewDetailDescription('')
+    setShowAddDetailForm(false)
+  }
+
+  // Remove project detail
+  const handleRemoveDetail = (index: number) => {
+    setEditContractProjectDetails(prev => prev.filter((_, i) => i !== index))
+  }
+
   // ==================== Client/User Management Functions ====================
 
   // Show client success message
@@ -1230,6 +1615,7 @@ function ControllersContent() {
       completed: '#00C781',
       onhold: '#94a3b8',
       'on-hold': '#94a3b8',
+      cancelled: '#FF4444',
       failed: '#FF4444'
     }
     return colors[status] || '#666'
@@ -1274,7 +1660,7 @@ function ControllersContent() {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat(isRTL ? 'ar-SA' : 'en-US', {
       style: 'currency',
-      currency: 'SAR',
+      currency: 'USD',
       minimumFractionDigits: 0
     }).format(amount)
   }
@@ -2029,6 +2415,7 @@ function ControllersContent() {
                   <option value="pending">{isRTL ? 'معلق' : 'Pending'}</option>
                   <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
                   <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+                  <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
                 </select>
               </div>
               <div style={{ flex: '0 1 200px' }}>
@@ -2101,7 +2488,7 @@ function ControllersContent() {
                     </select>
                   </div>
                   <div className={styles.formGroup}>
-                    <label>{isRTL ? 'السعر (ر.س)' : 'Price (SAR)'} *</label>
+                    <label>{isRTL ? 'السعر (ر.س)' : 'Price (USD)'} *</label>
                     <input
                       type="number"
                       min="0"
@@ -2112,11 +2499,22 @@ function ControllersContent() {
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label>{t.controllers.projects.deadline} *</label>
+                    <label>{isRTL ? 'المدة (أيام)' : 'Duration (days)'}</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newProjectDuration}
+                      onChange={(e) => setNewProjectDuration(e.target.value)}
+                      placeholder={isRTL ? 'مثال: 45' : 'e.g. 45'}
+                      className={styles.formInput}
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>{isRTL ? 'تاريخ البدء' : 'Start Date'}</label>
                     <input
                       type="date"
-                      value={newProjectDeadline}
-                      onChange={(e) => setNewProjectDeadline(e.target.value)}
+                      value={newProjectStartDate}
+                      onChange={(e) => setNewProjectStartDate(e.target.value)}
                       className={styles.formInput}
                     />
                   </div>
@@ -2144,6 +2542,7 @@ function ControllersContent() {
                       <option value="active">{isRTL ? 'نشط' : 'Active'}</option>
                       <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
                       <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+                      <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
                     </select>
                   </div>
                 </div>
@@ -2151,8 +2550,8 @@ function ControllersContent() {
                   <button
                     className={styles.primaryBtn}
                     onClick={addNewProject}
-                    disabled={projectActionLoading || !newProjectName || !newProjectUserId || !newProjectPrice || !newProjectDeadline}
-                    style={{ opacity: projectActionLoading || !newProjectName || !newProjectUserId || !newProjectPrice || !newProjectDeadline ? 0.5 : 1 }}
+                    disabled={projectActionLoading || !newProjectName || !newProjectUserId || !newProjectPrice}
+                    style={{ opacity: projectActionLoading || !newProjectName || !newProjectUserId || !newProjectPrice ? 0.5 : 1 }}
                   >
                     {projectActionLoading ? (isRTL ? 'جاري الإنشاء...' : 'Creating...') : (<><SaveIcon size={16} /> {t.controllers.projects.add}</>)}
                   </button>
@@ -2179,6 +2578,11 @@ function ControllersContent() {
                     </button>
                   </div>
                   <div className={styles.formGrid}>
+                    {editingProject?.has_signed && (
+                      <div style={{ gridColumn: '1 / -1', padding: '10px 15px', background: 'rgba(255, 140, 0, 0.1)', border: '1px solid rgba(255, 140, 0, 0.3)', borderRadius: '8px', color: '#FF8C00', fontSize: '0.85rem' }}>
+                        ⚠️ {isRTL ? 'تم توقيع العقد - بعض الحقول محمية من التعديل' : 'Contract signed - some fields are protected from editing'}
+                      </div>
+                    )}
                     <div className={styles.formGroup}>
                       <label>{t.controllers.projects.name}</label>
                       <input
@@ -2186,20 +2590,24 @@ function ControllersContent() {
                         value={editProjectName}
                         onChange={(e) => setEditProjectName(e.target.value)}
                         className={styles.formInput}
+                        disabled={editingProject?.has_signed}
+                        style={editingProject?.has_signed ? { opacity: 0.5 } : {}}
                       />
                     </div>
                     <div className={styles.formGroup}>
-                      <label>{isRTL ? 'السعر (ر.س)' : 'Price (SAR)'}</label>
+                      <label>{isRTL ? 'السعر (ر.س)' : 'Price (USD)'}</label>
                       <input
                         type="number"
                         min="0"
                         value={editProjectPrice}
                         onChange={(e) => setEditProjectPrice(parseFloat(e.target.value) || 0)}
                         className={styles.formInput}
+                        disabled={editingProject?.has_signed}
+                        style={editingProject?.has_signed ? { opacity: 0.5 } : {}}
                       />
                     </div>
                     <div className={styles.formGroup}>
-                      <label>{isRTL ? 'المصروف (ر.س)' : 'Spent (SAR)'}</label>
+                      <label>{isRTL ? 'المصروف (ر.س)' : 'Spent (USD)'}</label>
                       <input
                         type="number"
                         min="0"
@@ -2219,15 +2627,40 @@ function ControllersContent() {
                         <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
                         <option value="pending">{isRTL ? 'قيد الانتظار' : 'Pending'}</option>
                         <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+                        <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
                       </select>
                     </div>
+                    {editProjectStatus !== editingProject?.status && (
+                      <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
+                        <label>{isRTL ? 'سبب تغيير الحالة' : 'Status Change Reason'}</label>
+                        <input
+                          type="text"
+                          value={editProjectStatusReason}
+                          onChange={(e) => setEditProjectStatusReason(e.target.value)}
+                          placeholder={isRTL ? 'أدخل سبب تغيير الحالة...' : 'Enter reason for status change...'}
+                          className={styles.formInput}
+                        />
+                      </div>
+                    )}
                     <div className={styles.formGroup}>
-                      <label>{t.controllers.projects.deadline}</label>
+                      <label>{isRTL ? 'المدة (أيام)' : 'Duration (days)'}</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={editProjectDuration}
+                        onChange={(e) => setEditProjectDuration(e.target.value)}
+                        className={styles.formInput}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>{isRTL ? 'تاريخ البدء' : 'Start Date'} {editingProject?.start_date ? (isRTL ? '(مقفل)' : '(locked)') : ''}</label>
                       <input
                         type="date"
-                        value={editProjectDeadline}
-                        onChange={(e) => setEditProjectDeadline(e.target.value)}
+                        value={editProjectStartDate}
+                        onChange={(e) => setEditProjectStartDate(e.target.value)}
                         className={styles.formInput}
+                        disabled={!!editingProject?.start_date}
+                        style={editingProject?.start_date ? { opacity: 0.5 } : {}}
                       />
                     </div>
                     <div className={styles.formGroup}>
@@ -2244,12 +2677,13 @@ function ControllersContent() {
                       </select>
                     </div>
                     <div className={styles.formGroup}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: editingProject?.has_signed ? 'not-allowed' : 'pointer' }}>
                         <input
                           type="checkbox"
                           checked={editProjectHasSigned}
                           onChange={(e) => setEditProjectHasSigned(e.target.checked)}
-                          style={{ width: '18px', height: '18px', accentColor: '#0070F3', cursor: 'pointer' }}
+                          disabled={editingProject?.has_signed}
+                          style={{ width: '18px', height: '18px', accentColor: '#0070F3', cursor: editingProject?.has_signed ? 'not-allowed' : 'pointer' }}
                         />
                         {isRTL ? 'تم التوقيع على العقد' : 'Contract Signed'}
                       </label>
@@ -2362,6 +2796,7 @@ function ControllersContent() {
                     pending: { ar: 'معلق', en: 'Pending' },
                     completed: { ar: 'مكتمل', en: 'Completed' },
                     onhold: { ar: 'متوقف', en: 'On Hold' },
+                    cancelled: { ar: 'ملغى', en: 'Cancelled' },
                   }
                   return (
                     <div key={project.id} className={styles.projectCard}>
@@ -2383,7 +2818,7 @@ function ControllersContent() {
                           {project.priority}
                         </span>
                         <span style={{ marginInlineStart: '8px', color: '#94a3b8', fontSize: '0.85rem' }}>
-                          {formatDate(project.deadline)}
+                          {project.duration ? `${project.duration} ${isRTL ? 'يوم' : 'days'}` : '-'}
                         </span>
                       </p>
                       
@@ -2412,6 +2847,22 @@ function ControllersContent() {
                       <div className={styles.projectFooter}>
                         <span className={styles.teamInfo}><UsersIcon size={16} /> {project.team?.length || 0} {isRTL ? 'أعضاء' : 'members'}</span>
                         <div className={styles.actionButtons}>
+                          <button 
+                            className={styles.iconBtn} 
+                            onClick={() => openContractDialog(project)} 
+                            title={isRTL ? 'العقد' : 'Contract'}
+                            style={{ color: '#14b8a6' }}
+                          >
+                            <FileTextIcon size={18} />
+                          </button>
+                          <button 
+                            className={styles.iconBtn} 
+                            onClick={() => window.open(`/dashboard/projects/${project.id}`, '_blank')}
+                            title={isRTL ? 'مشاركة' : 'Share'}
+                            style={{ color: '#0070F3' }}
+                          >
+                            🔗
+                          </button>
                           <button className={styles.iconBtn} onClick={() => openEditProject(project)} title={isRTL ? 'إدارة' : 'Manage'}><EditIcon size={18} /></button>
                           <button 
                             className={styles.iconBtn} 
@@ -2477,6 +2928,11 @@ function ControllersContent() {
                       background: 'rgba(255,255,255,0.03)',
                       borderRadius: '12px'
                     }}>
+                      {viewingProject?.has_signed && (
+                        <div style={{ gridColumn: '1 / -1', padding: '10px 15px', background: 'rgba(255, 140, 0, 0.1)', border: '1px solid rgba(255, 140, 0, 0.3)', borderRadius: '8px', color: '#FF8C00', fontSize: '0.85rem' }}>
+                          ⚠️ {isRTL ? 'تم توقيع العقد - بعض الحقول محمية من التعديل' : 'Contract signed - some fields are protected from editing'}
+                        </div>
+                      )}
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
                           {isRTL ? 'اسم المشروع' : 'Project Name'}
@@ -2486,12 +2942,13 @@ function ControllersContent() {
                           value={editProjectName}
                           onChange={(e) => setEditProjectName(e.target.value)}
                           className={styles.formInput}
-                          style={{ margin: 0, width: '100%' }}
+                          style={{ margin: 0, width: '100%', ...(viewingProject?.has_signed ? { opacity: 0.5 } : {}) }}
+                          disabled={viewingProject?.has_signed}
                         />
                       </div>
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
-                          {isRTL ? 'الميزانية (ر.س)' : 'Budget (SAR)'}
+                          {isRTL ? 'الميزانية (ر.س)' : 'Budget (USD)'}
                         </label>
                         <input
                           type="number"
@@ -2499,12 +2956,13 @@ function ControllersContent() {
                           value={editProjectPrice}
                           onChange={(e) => setEditProjectPrice(parseFloat(e.target.value) || 0)}
                           className={styles.formInput}
-                          style={{ margin: 0, width: '100%' }}
+                          style={{ margin: 0, width: '100%', ...(viewingProject?.has_signed ? { opacity: 0.5 } : {}) }}
+                          disabled={viewingProject?.has_signed}
                         />
                       </div>
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
-                          {isRTL ? 'المصروف (ر.س)' : 'Spent (SAR)'}
+                          {isRTL ? 'المصروف (ر.س)' : 'Spent (USD)'}
                         </label>
                         <input
                           type="number"
@@ -2517,14 +2975,28 @@ function ControllersContent() {
                       </div>
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
-                          {isRTL ? 'الموعد النهائي' : 'Deadline'}
+                          {isRTL ? 'المدة (أيام)' : 'Duration (days)'}
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={editProjectDuration}
+                          onChange={(e) => setEditProjectDuration(e.target.value)}
+                          className={styles.formInput}
+                          style={{ margin: 0, width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          {isRTL ? 'تاريخ البدء' : 'Start Date'} {viewingProject?.start_date ? (isRTL ? '(مقفل)' : '(locked)') : ''}
                         </label>
                         <input
                           type="date"
-                          value={editProjectDeadline}
-                          onChange={(e) => setEditProjectDeadline(e.target.value)}
+                          value={editProjectStartDate}
+                          onChange={(e) => setEditProjectStartDate(e.target.value)}
                           className={styles.formInput}
-                          style={{ margin: 0, width: '100%' }}
+                          style={{ margin: 0, width: '100%', ...(viewingProject?.start_date ? { opacity: 0.5 } : {}) }}
+                          disabled={!!viewingProject?.start_date}
                         />
                       </div>
                       <div>
@@ -2541,8 +3013,24 @@ function ControllersContent() {
                           <option value="active">{isRTL ? 'نشط' : 'Active'}</option>
                           <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
                           <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+                          <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
                         </select>
                       </div>
+                      {editProjectStatus !== viewingProject?.status && (
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                            {isRTL ? 'سبب تغيير الحالة' : 'Status Change Reason'}
+                          </label>
+                          <input
+                            type="text"
+                            value={editProjectStatusReason}
+                            onChange={(e) => setEditProjectStatusReason(e.target.value)}
+                            placeholder={isRTL ? 'أدخل سبب تغيير الحالة...' : 'Enter reason for status change...'}
+                            className={styles.formInput}
+                            style={{ margin: 0, width: '100%' }}
+                          />
+                        </div>
+                      )}
                       <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
                           {isRTL ? 'الأولوية' : 'Priority'}
@@ -2560,12 +3048,13 @@ function ControllersContent() {
                         </select>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: viewingProject?.has_signed ? 'not-allowed' : 'pointer', color: '#94a3b8', fontSize: '0.9rem' }}>
                           <input
                             type="checkbox"
                             checked={editProjectHasSigned}
                             onChange={(e) => setEditProjectHasSigned(e.target.checked)}
-                            style={{ width: '18px', height: '18px', accentColor: '#0070F3', cursor: 'pointer' }}
+                            disabled={viewingProject?.has_signed}
+                            style={{ width: '18px', height: '18px', accentColor: '#0070F3', cursor: viewingProject?.has_signed ? 'not-allowed' : 'pointer' }}
                           />
                           {isRTL ? 'تم التوقيع على العقد' : 'Contract Signed'}
                         </label>
@@ -3007,6 +3496,733 @@ function ControllersContent() {
                       {isRTL ? 'إلغاء' : 'Cancel'}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Contract Dialog Modal */}
+            {showContractDialog && contractDialogProject && (
+              <div className={styles.modalOverlay} onClick={() => { setShowContractDialog(false); setContractDialogProject(null); setContractData(null); setContractError(null); }}>
+                <div 
+                  className={styles.modal} 
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ maxWidth: '800px', maxHeight: '90vh', overflow: 'auto' }}
+                >
+                  {/* Header */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginBottom: '1.5rem',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid rgba(255,255,255,0.1)'
+                  }}>
+                    <h2 style={{ margin: 0, color: '#fff', fontSize: '1.3rem' }}>
+                      📜 {isRTL ? `عقد مشروع: ${contractDialogProject.name}` : `Contract: ${contractDialogProject.name}`}
+                    </h2>
+                    <button
+                      onClick={() => { setShowContractDialog(false); setContractDialogProject(null); setContractData(null); setContractError(null); }}
+                      style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.5rem', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Contract Success/Error Toasts */}
+                  {contractSuccess && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #00C781, #0070F3)', color: '#fff',
+                      padding: '10px 20px', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem',
+                      marginBottom: '1rem', textAlign: 'center',
+                    }}>
+                      {contractSuccess}
+                    </div>
+                  )}
+                  {contractError && (
+                    <div style={{
+                      background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.3)',
+                      color: '#ff6b6b', padding: '10px 20px', borderRadius: '10px', fontSize: '0.9rem',
+                      marginBottom: '1rem', textAlign: 'center', cursor: 'pointer',
+                    }} onClick={() => setContractError(null)}>
+                      {contractError}
+                    </div>
+                  )}
+
+                  {/* Loading */}
+                  {contractLoading && (
+                    <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                      <div style={{
+                        width: '40px', height: '40px', border: '3px solid rgba(20, 184, 166, 0.2)',
+                        borderTopColor: '#14b8a6', borderRadius: '50%', margin: '0 auto 1rem',
+                        animation: 'spin 0.8s linear infinite',
+                      }} />
+                      <p>{isRTL ? 'جاري تحميل بيانات العقد...' : 'Loading contract data...'}</p>
+                    </div>
+                  )}
+
+                  {/* No Contract - Create one */}
+                  {!contractLoading && !contractData && (
+                    <div style={{ textAlign: 'center', padding: '3rem' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.4 }}>📄</div>
+                      <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>
+                        {isRTL ? 'لا يوجد عقد لهذا المشروع' : 'No contract for this project'}
+                      </h3>
+                      <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
+                        {isRTL ? 'يمكنك إنشاء عقد جديد لهذا المشروع' : 'You can create a new contract for this project'}
+                      </p>
+                      <button
+                        className={styles.primaryBtn}
+                        onClick={() => handleCreateContractForProject(contractDialogProject)}
+                        disabled={contractActionLoading}
+                        style={{ opacity: contractActionLoading ? 0.5 : 1 }}
+                      >
+                        {contractActionLoading 
+                          ? (isRTL ? 'جاري الإنشاء...' : 'Creating...') 
+                          : (isRTL ? '📜 إنشاء عقد' : '📜 Create Contract')
+                        }
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Contract Details - Edit Form */}
+                  {!contractLoading && contractData && (
+                    <div>
+                      {/* Contract Status Badge */}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        marginBottom: '1.5rem',
+                        padding: '0.8rem 1rem',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                            {isRTL ? 'رقم العقد:' : 'Contract #:'}
+                          </span>
+                          <span style={{ color: '#14b8a6', fontWeight: 600, fontFamily: 'monospace' }}>
+                            {contractData.contract_number}
+                          </span>
+                        </div>
+                        <span style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          background: editContractStatus === 'active' ? 'rgba(0, 199, 129, 0.15)' : 
+                                     editContractStatus === 'completed' ? 'rgba(20, 184, 166, 0.15)' :
+                                     editContractStatus === 'cancelled' ? 'rgba(255, 68, 68, 0.15)' : 'rgba(255, 140, 0, 0.15)',
+                          color: editContractStatus === 'active' ? '#00C781' : 
+                                 editContractStatus === 'completed' ? '#14b8a6' :
+                                 editContractStatus === 'cancelled' ? '#FF4444' : '#FF8C00',
+                          border: `1px solid ${editContractStatus === 'active' ? 'rgba(0, 199, 129, 0.3)' : 
+                                              editContractStatus === 'completed' ? 'rgba(20, 184, 166, 0.3)' :
+                                              editContractStatus === 'cancelled' ? 'rgba(255, 68, 68, 0.3)' : 'rgba(255, 140, 0, 0.3)'}`,
+                        }}>
+                          {editContractStatus === 'pending' ? (isRTL ? 'بانتظار التوقيع' : 'Pending') :
+                           editContractStatus === 'active' ? (isRTL ? 'نشط' : 'Active') :
+                           editContractStatus === 'completed' ? (isRTL ? 'مكتمل' : 'Completed') :
+                           (isRTL ? 'ملغي' : 'Cancelled')}
+                        </span>
+                      </div>
+
+                      {/* Basic Info */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: '0 0 1rem', color: '#fff', fontSize: '1rem' }}>
+                          {isRTL ? 'معلومات العقد' : 'Contract Information'}
+                        </h3>
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          gap: '1rem',
+                          padding: '1rem',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '12px'
+                        }}>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'اسم العميل' : 'Client Name'}
+                            </label>
+                            <input
+                              type="text"
+                              value={editContractClientName}
+                              onChange={(e) => setEditContractClientName(e.target.value)}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'بريد العميل' : 'Client Email'}
+                            </label>
+                            <input
+                              type="email"
+                              value={editContractClientEmail}
+                              onChange={(e) => setEditContractClientEmail(e.target.value)}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                              dir="ltr"
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'قيمة العقد ($)' : 'Contract Value ($)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editContractPrice}
+                              onChange={(e) => setEditContractPrice(parseFloat(e.target.value) || 0)}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'عدد الدفعات' : 'Payment Installments'}
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="12"
+                              value={editContractPayNumber}
+                              onChange={(e) => setEditContractPayNumber(parseInt(e.target.value) || 1)}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'الحالة' : 'Status'}
+                            </label>
+                            <select
+                              value={editContractStatus}
+                              onChange={(e) => setEditContractStatus(e.target.value as Contract['status'])}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            >
+                              <option value="pending">{isRTL ? 'بانتظار التوقيع' : 'Pending'}</option>
+                              <option value="active">{isRTL ? 'نشط' : 'Active'}</option>
+                              <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
+                              <option value="cancelled">{isRTL ? 'ملغي' : 'Cancelled'}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                          {isRTL ? 'وصف المشروع' : 'Project Description'}
+                        </label>
+                        <textarea
+                          value={editContractDescription}
+                          onChange={(e) => setEditContractDescription(e.target.value)}
+                          className={styles.formInput}
+                          style={{ margin: 0, width: '100%', minHeight: '80px', resize: 'vertical' }}
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Extra Contract Fields */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: '0 0 1rem', color: '#fff', fontSize: '1rem' }}>
+                          ⚙️ {isRTL ? 'تفاصيل إضافية للعقد' : 'Additional Contract Details'}
+                        </h3>
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          gap: '1rem',
+                          padding: '1rem',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '12px'
+                        }}>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'مدة التنفيذ' : 'Project Duration'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editContractProjectDuration ?? ''}
+                              onChange={(e) => setEditContractProjectDuration(e.target.value ? parseInt(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 30' : 'e.g. 30'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'وحدة المدة' : 'Duration Unit'}
+                            </label>
+                            <select
+                              value={editContractProjectDurationUnit ?? 'days'}
+                              onChange={(e) => setEditContractProjectDurationUnit(e.target.value)}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            >
+                              <option value="days">{isRTL ? 'يوم' : 'Days'}</option>
+                              <option value="weeks">{isRTL ? 'أسبوع' : 'Weeks'}</option>
+                              <option value="months">{isRTL ? 'شهر' : 'Months'}</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'عدد التعديلات المسموحة' : 'Revisions Allowed'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editContractRevisionsAllowed ?? ''}
+                              onChange={(e) => setEditContractRevisionsAllowed(e.target.value ? parseInt(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 3' : 'e.g. 3'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'فترة الضمان (أشهر)' : 'Warranty Period (months)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editContractWarrantyPeriod ?? ''}
+                              onChange={(e) => setEditContractWarrantyPeriod(e.target.value ? parseInt(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 3' : 'e.g. 3'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'الإلغاء التلقائي بعد (يوم)' : 'Auto Cancel (days)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={editContractAutoCancelDays ?? ''}
+                              onChange={(e) => setEditContractAutoCancelDays(e.target.value ? parseInt(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 7' : 'e.g. 7'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'نسبة التسامح في التقدم (%)' : 'Progress Tolerance (%)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={editContractProgressTolerance ?? ''}
+                              onChange={(e) => setEditContractProgressTolerance(e.target.value ? parseFloat(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 10' : 'e.g. 10'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'تعويض التأخير (%)' : 'Delay Compensation (%)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={editContractDelayCompensation ?? ''}
+                              onChange={(e) => setEditContractDelayCompensation(e.target.value ? parseFloat(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 5' : 'e.g. 5'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'نسبة الاسترداد - خطأ العميل (%)' : 'Client Fault Refund (%)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={editContractClientFaultRefund ?? ''}
+                              onChange={(e) => setEditContractClientFaultRefund(e.target.value ? parseFloat(e.target.value) : null)}
+                              placeholder={isRTL ? 'مثال: 50' : 'e.g. 50'}
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                            />
+                          </div>
+                          <div style={{ gridColumn: '1 / -1' }}>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'رابط متابعة سير المشروع' : 'Progress Timeline Link'}
+                            </label>
+                            <input
+                              type="url"
+                              value={editContractProgressTimelineLink ?? ''}
+                              onChange={(e) => setEditContractProgressTimelineLink(e.target.value || null)}
+                              placeholder="https://..."
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                              dir="ltr"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Clauses Section */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                          <h3 style={{ margin: 0, color: '#fff', fontSize: '1rem' }}>
+                            📜 {isRTL ? 'بنود العقد' : 'Contract Clauses'} ({editContractClauses.length})
+                          </h3>
+                          <button
+                            onClick={() => setShowAddClauseForm(!showAddClauseForm)}
+                            style={{
+                              padding: '0.4rem 0.8rem',
+                              background: 'rgba(20, 184, 166, 0.15)',
+                              border: '1px solid rgba(20, 184, 166, 0.3)',
+                              borderRadius: '8px',
+                              color: '#14b8a6',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            + {isRTL ? 'إضافة بند' : 'Add Clause'}
+                          </button>
+                        </div>
+
+                        {/* Add Clause Form */}
+                        {showAddClauseForm && (
+                          <div style={{
+                            padding: '1rem',
+                            background: 'rgba(20, 184, 166, 0.05)',
+                            border: '1px solid rgba(20, 184, 166, 0.15)',
+                            borderRadius: '10px',
+                            marginBottom: '0.8rem',
+                          }}>
+                            <input
+                              type="text"
+                              value={newClauseTitle}
+                              onChange={(e) => setNewClauseTitle(e.target.value)}
+                              placeholder={isRTL ? 'عنوان البند...' : 'Clause title...'}
+                              className={styles.formInput}
+                              style={{ margin: '0 0 0.5rem', width: '100%' }}
+                            />
+                            <textarea
+                              value={newClauseDescription}
+                              onChange={(e) => setNewClauseDescription(e.target.value)}
+                              placeholder={isRTL ? 'تفاصيل البند...' : 'Clause details...'}
+                              className={styles.formInput}
+                              style={{ margin: '0 0 0.5rem', width: '100%', minHeight: '60px' }}
+                              rows={2}
+                            />
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={handleAddClause}
+                                disabled={!newClauseTitle.trim() || !newClauseDescription.trim()}
+                                style={{
+                                  padding: '0.4rem 1rem',
+                                  background: '#14b8a6',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  color: '#fff',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                  opacity: !newClauseTitle.trim() || !newClauseDescription.trim() ? 0.5 : 1,
+                                }}
+                              >
+                                {isRTL ? 'إضافة' : 'Add'}
+                              </button>
+                              <button
+                                onClick={() => { setShowAddClauseForm(false); setNewClauseTitle(''); setNewClauseDescription(''); }}
+                                style={{
+                                  padding: '0.4rem 1rem',
+                                  background: 'rgba(255,255,255,0.05)',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  borderRadius: '6px',
+                                  color: '#94a3b8',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {isRTL ? 'إلغاء' : 'Cancel'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Clauses List */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {editContractClauses.map((clause, index) => (
+                            <div key={index} style={{
+                              padding: '0.8rem 1rem',
+                              background: 'rgba(255,255,255,0.03)',
+                              border: '1px solid rgba(255,255,255,0.06)',
+                              borderRadius: '10px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              gap: '1rem',
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{
+                                    width: '22px', height: '22px', borderRadius: '50%',
+                                    background: 'rgba(20, 184, 166, 0.15)', color: '#14b8a6',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '0.7rem', fontWeight: 700,
+                                  }}>{index + 1}</span>
+                                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{clause.title}</span>
+                                </div>
+                                <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
+                                  {clause.description}
+                                </p>
+                              </div>
+                              {isMandatoryClause(clause.title) ? (
+                                <span style={{
+                                  fontSize: '0.65rem',
+                                  padding: '2px 8px',
+                                  background: 'rgba(20, 184, 166, 0.15)',
+                                  border: '1px solid rgba(20, 184, 166, 0.3)',
+                                  borderRadius: '20px',
+                                  color: '#14b8a6',
+                                  flexShrink: 0,
+                                  whiteSpace: 'nowrap',
+                                  fontWeight: 700,
+                                }}>
+                                  🔒 {isRTL ? 'إلزامي' : 'Mandatory'}
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleRemoveClause(index)}
+                                  style={{
+                                    background: 'none', border: 'none', color: '#ff6b6b',
+                                    cursor: 'pointer', fontSize: '1rem', padding: '2px 6px',
+                                    flexShrink: 0,
+                                  }}
+                                  title={isRTL ? 'حذف البند' : 'Remove clause'}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {editContractClauses.length === 0 && (
+                            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'لا توجد بنود - أضف بنود للعقد' : 'No clauses - add clauses to the contract'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Project Details Section */}
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                          <h3 style={{ margin: 0, color: '#fff', fontSize: '1rem' }}>
+                            📋 {isRTL ? 'تفاصيل المشروع' : 'Project Details'} ({editContractProjectDetails.length})
+                          </h3>
+                          <button
+                            onClick={() => setShowAddDetailForm(!showAddDetailForm)}
+                            style={{
+                              padding: '0.4rem 0.8rem',
+                              background: 'rgba(20, 184, 166, 0.15)',
+                              border: '1px solid rgba(20, 184, 166, 0.3)',
+                              borderRadius: '8px',
+                              color: '#14b8a6',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            + {isRTL ? 'إضافة تفصيل' : 'Add Detail'}
+                          </button>
+                        </div>
+
+                        {/* Add Detail Form */}
+                        {showAddDetailForm && (
+                          <div style={{
+                            padding: '1rem',
+                            background: 'rgba(20, 184, 166, 0.05)',
+                            border: '1px solid rgba(20, 184, 166, 0.15)',
+                            borderRadius: '10px',
+                            marginBottom: '0.8rem',
+                          }}>
+                            <input
+                              type="text"
+                              value={newDetailTitle}
+                              onChange={(e) => setNewDetailTitle(e.target.value)}
+                              placeholder={isRTL ? 'عنوان التفصيل...' : 'Detail title...'}
+                              className={styles.formInput}
+                              style={{ margin: '0 0 0.5rem', width: '100%' }}
+                            />
+                            <textarea
+                              value={newDetailDescription}
+                              onChange={(e) => setNewDetailDescription(e.target.value)}
+                              placeholder={isRTL ? 'وصف التفصيل...' : 'Detail description...'}
+                              className={styles.formInput}
+                              style={{ margin: '0 0 0.5rem', width: '100%', minHeight: '60px' }}
+                              rows={2}
+                            />
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={handleAddDetail}
+                                disabled={!newDetailTitle.trim() || !newDetailDescription.trim()}
+                                style={{
+                                  padding: '0.4rem 1rem',
+                                  background: '#14b8a6',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  color: '#fff',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                  opacity: !newDetailTitle.trim() || !newDetailDescription.trim() ? 0.5 : 1,
+                                }}
+                              >
+                                {isRTL ? 'إضافة' : 'Add'}
+                              </button>
+                              <button
+                                onClick={() => { setShowAddDetailForm(false); setNewDetailTitle(''); setNewDetailDescription(''); }}
+                                style={{
+                                  padding: '0.4rem 1rem',
+                                  background: 'rgba(255,255,255,0.05)',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  borderRadius: '6px',
+                                  color: '#94a3b8',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {isRTL ? 'إلغاء' : 'Cancel'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Details List */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {editContractProjectDetails.map((detail, index) => (
+                            <div key={index} style={{
+                              padding: '0.8rem 1rem',
+                              background: 'rgba(255,255,255,0.03)',
+                              border: '1px solid rgba(255,255,255,0.06)',
+                              borderRadius: '10px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              gap: '1rem',
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{
+                                    width: '22px', height: '22px', borderRadius: '50%',
+                                    background: 'rgba(20, 184, 166, 0.15)', color: '#14b8a6',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '0.7rem', fontWeight: 700,
+                                  }}>{index + 1}</span>
+                                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{detail.title}</span>
+                                </div>
+                                <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
+                                  {detail.description}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleRemoveDetail(index)}
+                                style={{
+                                  background: 'none', border: 'none', color: '#ff6b6b',
+                                  cursor: 'pointer', fontSize: '1rem', padding: '2px 6px',
+                                  flexShrink: 0,
+                                }}
+                                title={isRTL ? 'حذف التفصيل' : 'Remove detail'}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          {editContractProjectDetails.length === 0 && (
+                            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              {isRTL ? 'لا توجد تفاصيل - أضف تفاصيل للمشروع' : 'No details - add project details'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Signed info */}
+                      {contractData.signed_at && (
+                        <div style={{
+                          padding: '0.8rem 1rem',
+                          background: 'rgba(0, 199, 129, 0.08)',
+                          border: '1px solid rgba(0, 199, 129, 0.2)',
+                          borderRadius: '10px',
+                          marginBottom: '1.5rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          color: '#00C781',
+                          fontSize: '0.85rem',
+                        }}>
+                          <span>✍️</span>
+                          <span>
+                            {isRTL ? 'تم التوقيع بتاريخ: ' : 'Signed on: '}
+                            {new Date(contractData.signed_at).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: '10px', 
+                        paddingTop: '1rem',
+                        borderTop: '1px solid rgba(255,255,255,0.05)',
+                        flexWrap: 'wrap',
+                      }}>
+                        <button
+                          className={styles.primaryBtn}
+                          onClick={saveContractChanges}
+                          disabled={contractActionLoading}
+                          style={{ opacity: contractActionLoading ? 0.5 : 1 }}
+                        >
+                          {contractActionLoading ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : (<><SaveIcon size={16} /> {isRTL ? 'حفظ التغييرات' : 'Save Changes'}</>)}
+                        </button>
+                        {contractData && contractData.id && (
+                          <button
+                            className={styles.secondaryBtn}
+                            onClick={() => {
+                              window.open(`/dashboard/contract/${contractData.project_id || contractData.contract_number || contractData.id}`, '_blank');
+                            }}
+                          >
+                            <span style={{ marginRight: isRTL ? 0 : '6px', marginLeft: isRTL ? '6px' : 0 }}>👁️</span>
+                            {isRTL ? 'عرض العقد (Preview)' : 'Preview Contract'}
+                          </button>
+                        )}
+                        <button
+                          className={styles.secondaryBtn}
+                          onClick={() => { setShowContractDialog(false); setContractDialogProject(null); setContractData(null); }}
+                        >
+                          {isRTL ? 'إغلاق' : 'Close'}
+                        </button>
+                        <button
+                          onClick={handleDeleteContract}
+                          disabled={contractActionLoading}
+                          style={{
+                            marginInlineStart: 'auto',
+                            padding: '0.5rem 1rem',
+                            background: 'rgba(255, 68, 68, 0.1)',
+                            border: '1px solid rgba(255, 68, 68, 0.2)',
+                            borderRadius: '8px',
+                            color: '#ff6b6b',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            opacity: contractActionLoading ? 0.5 : 1,
+                          }}
+                        >
+                          {isRTL ? '🗑️ حذف العقد' : '🗑️ Delete Contract'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -1,13 +1,12 @@
 'use client'
 
 import { FC, useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import styles from './Dashboard.module.css'
 import { useLanguage } from '@/hooks/useLanguage'
 import { useGlobalAuth } from '@/lib/auth-context'
-import { getMyProjects } from '@/app/Projects/apiFunctions'
-import type { Project as ProjectType, ProgressItem } from '@/app/Projects/apiFunctions'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
+import { getMyProjects, getProjectById } from '@/app/Projects/apiFunctions'
+import type { Project as ProjectType, ProgressItem, StatusChange } from '@/app/Projects/apiFunctions'
 
 // ── Read-only Progress Line Bar ──────────────────────────────────────────────
 function ReadOnlyProgressBar({
@@ -15,11 +14,13 @@ function ReadOnlyProgressBar({
   completedIds,
   isRTL,
   isFinished,
+  hasSigned,
 }: {
   items: ProgressItem[]
   completedIds: string[]
   isRTL: boolean
   isFinished: boolean
+  hasSigned: boolean
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
@@ -193,25 +194,32 @@ function ReadOnlyProgressBar({
               fontWeight: 600,
               padding: '3px 8px',
               borderRadius: '6px',
-              background: 'rgba(100,116,139,0.18)',
-              border: '1px solid rgba(100,116,139,0.35)',
-              color: '#94a3b8',
+              background: hasSigned ? 'rgba(0,199,129,0.18)' : 'rgba(100,116,139,0.18)',
+              border: `1px solid ${hasSigned ? 'rgba(0,199,129,0.45)' : 'rgba(100,116,139,0.35)'}`,
+              color: hasSigned ? '#00C781' : '#94a3b8',
             }}>
               {isRTL ? 'البداية' : 'Start'}
             </span>
           </div>
           <div style={{
-            width: '15px',
-            height: '15px',
+            width: hasSigned ? '30px' : '15px',
+            height: hasSigned ? '30px' : '15px',
             borderRadius: '50%',
-            background: 'rgb(100, 116, 139)',
-            border: '2.5px solid rgb(100, 116, 139)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            background: hasSigned ? '#00C781' : 'rgb(100, 116, 139)',
+            border: `2.5px solid ${hasSigned ? '#00C781' : 'rgb(100, 116, 139)'}`,
+            boxShadow: hasSigned ? '0 0 14px rgba(0,199,129,0.4)' : '0 2px 8px rgba(0,0,0,0.3)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'default',
-          }} />
+            transition: 'all 0.3s ease',
+          }}>
+            {hasSigned && (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8L6.5 11.5L13 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </div>
         </div>
 
         {/* Fixed "Finish" circle at 100% — always visible */}
@@ -346,76 +354,264 @@ function ReadOnlyProgressBar({
   )
 }
 
+// ── Deadline Timeline Bar ────────────────────────────────────────────────────
+function DeadlineTimeline({
+  startDate,
+  duration,
+  statusChanges,
+  currentStatus,
+  isRTL,
+}: {
+  startDate: string | null
+  duration: number
+  statusChanges: StatusChange[]
+  currentStatus: string
+  isRTL: boolean
+}) {
+  if (!startDate || !duration) return null
+
+  const now = new Date()
+  const start = new Date(startDate)
+
+  // Sort status_changes by timestamp ascending
+  const sorted = [...statusChanges].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  )
+
+  // Calculate total active (working) days elapsed
+  let activeDays = 0
+  const isActiveStatus = (s: string) => s === 'active'
+
+  if (sorted.length === 0) {
+    if (isActiveStatus(currentStatus)) {
+      const diffMs = now.getTime() - start.getTime()
+      activeDays = Math.max(0, diffMs / (1000 * 60 * 60 * 24))
+    }
+  } else {
+    // Project starts as active from start_date until first status change
+    let prevStatus = 'active'
+    let prevTime = start
+
+    for (const change of sorted) {
+      const changeTime = new Date(change.timestamp)
+      if (isActiveStatus(prevStatus)) {
+        const diffMs = changeTime.getTime() - prevTime.getTime()
+        activeDays += Math.max(0, diffMs / (1000 * 60 * 60 * 24))
+      }
+      prevStatus = change.status
+      prevTime = changeTime
+    }
+
+    // Account for time from last status change to now
+    if (isActiveStatus(prevStatus)) {
+      const diffMs = now.getTime() - prevTime.getTime()
+      activeDays += Math.max(0, diffMs / (1000 * 60 * 60 * 24))
+    }
+  }
+
+  const activeDaysRounded = Math.floor(activeDays)
+  const remainingDays = Math.max(0, duration - activeDaysRounded)
+  const percent = Math.min(100, (activeDaysRounded / duration) * 100)
+  const isOverdue = activeDaysRounded >= duration
+  const isCompleted = currentStatus === 'completed'
+  const isPaused = currentStatus === 'onhold' || currentStatus === 'pending' || currentStatus === 'cancelled'
+
+  let barColor = '#0070F3'
+  let barGlow = 'rgba(0, 112, 243, 0.3)'
+  if (isCompleted) {
+    barColor = '#00C781'
+    barGlow = 'rgba(0, 199, 129, 0.3)'
+  } else if (isOverdue) {
+    barColor = '#FF4444'
+    barGlow = 'rgba(255, 68, 68, 0.3)'
+  } else if (percent > 75) {
+    barColor = '#FF8C00'
+    barGlow = 'rgba(255, 140, 0, 0.3)'
+  }
+
+  return (
+    <div style={{ padding: '0.75rem 0 0.25rem' }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '8px',
+        flexDirection: isRTL ? 'row-reverse' : 'row',
+      }}>
+        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-dim)' }}>
+          {isRTL ? '⏱ الموعد النهائي' : '⏱ Deadline'}
+        </span>
+        <span style={{
+          fontSize: '0.78rem',
+          fontWeight: 600,
+          color: isCompleted ? '#00C781' : isOverdue ? '#FF4444' : isPaused ? '#94a3b8' : barColor,
+        }}>
+          {isCompleted
+            ? (isRTL ? '✓ اكتمل' : '✓ Completed')
+            : isOverdue
+              ? (isRTL ? `⚠ تجاوز الموعد بـ ${activeDaysRounded - duration} يوم` : `⚠ Overdue by ${activeDaysRounded - duration} days`)
+              : isPaused
+                ? (isRTL ? `⏸ متوقف — متبقي ${remainingDays} يوم` : `⏸ Paused — ${remainingDays} days left`)
+                : (isRTL ? `متبقي ${remainingDays} يوم من ${duration}` : `${remainingDays} of ${duration} days left`)}
+        </span>
+      </div>
+
+      {/* Bar */}
+      <div style={{
+        position: 'relative',
+        height: '10px',
+        background: 'var(--bg-hover)',
+        borderRadius: '5px',
+        overflow: 'hidden',
+        marginLeft: '1rem',
+        marginRight: '1rem',
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          height: '100%',
+          width: `${Math.min(percent, 100)}%`,
+          background: isCompleted
+            ? 'linear-gradient(90deg, #0070F3, #00C781)'
+            : isOverdue
+              ? 'linear-gradient(90deg, #FF8C00, #FF4444)'
+              : `linear-gradient(90deg, ${barColor}99, ${barColor})`,
+          borderRadius: '5px',
+          boxShadow: `0 0 8px ${barGlow}`,
+          transition: 'width 0.6s ease, background 0.4s ease',
+        }} />
+
+        {[25, 50, 75].map(tick => (
+          <div key={tick} style={{
+            position: 'absolute',
+            left: `${tick}%`,
+            top: 0,
+            width: '1px',
+            height: '100%',
+            background: 'rgba(255,255,255,0.08)',
+          }} />
+        ))}
+      </div>
+
+      {/* Scale labels */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginTop: '4px',
+        marginLeft: '1rem',
+        marginRight: '1rem',
+        fontSize: '0.68rem',
+        color: 'var(--text-dim)',
+        opacity: 0.6,
+        flexDirection: isRTL ? 'row-reverse' : 'row',
+      }}>
+        <span>{isRTL ? 'البداية' : 'Start'}</span>
+        <span>{Math.round(duration / 2)} {isRTL ? 'يوم' : 'd'}</span>
+        <span>{duration} {isRTL ? 'يوم' : 'd'}</span>
+      </div>
+
+      {/* Detail chips */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        marginTop: '6px',
+        flexWrap: 'wrap',
+        flexDirection: isRTL ? 'row-reverse' : 'row',
+      }}>
+        <span style={{
+          fontSize: '0.72rem',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          background: 'rgba(0,112,243,0.1)',
+          border: '1px solid rgba(0,112,243,0.2)',
+          color: '#0070F3',
+        }}>
+          {isRTL ? `أيام العمل: ${activeDaysRounded}` : `Worked: ${activeDaysRounded}d`}
+        </span>
+        <span style={{
+          fontSize: '0.72rem',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          background: isOverdue ? 'rgba(255,68,68,0.1)' : 'rgba(0,199,129,0.1)',
+          border: `1px solid ${isOverdue ? 'rgba(255,68,68,0.2)' : 'rgba(0,199,129,0.2)'}`,
+          color: isOverdue ? '#FF4444' : '#00C781',
+        }}>
+          {isRTL ? `المتبقي: ${remainingDays}` : `Left: ${remainingDays}d`}
+        </span>
+        {isPaused && (
+          <span style={{
+            fontSize: '0.72rem',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            background: 'rgba(148,163,184,0.1)',
+            border: '1px solid rgba(148,163,184,0.2)',
+            color: '#94a3b8',
+          }}>
+            {isRTL ? '⏸ المؤقت متوقف' : '⏸ Timer paused'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 interface Milestone {
   name: string
   threshold: number
   isCompleted: boolean
 }
 
-const ProjectOverview: FC = () => {
+const ProjectOverview: FC<{ projectId?: string }> = ({ projectId }) => {
   const { t, language } = useLanguage()
   const { user } = useGlobalAuth()
+  const router = useRouter()
   const isRTL = language === 'ar'
 
   const [projects, setProjects] = useState<ProjectType[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Track which project id is currently waiting for sign API response
-  const [signLoadingId, setSignLoadingId] = useState<string | null>(null)
-
-  const handleSign = async (projectId: string) => {
-    setSignLoadingId(projectId)
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE_URL}/projects/${projectId}/sign`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      })
-      const json = await res.json()
-      if (json.success) {
-        // Update local state so the notice disappears immediately
-        setProjects(prev =>
-          prev.map(p => p.id === projectId ? { ...p, has_signed: true } : p)
-        )
-      }
-    } catch (err) {
-      console.error('Sign request failed:', err)
-    } finally {
-      setSignLoadingId(null)
-    }
-  }
-
-  // Fetch user's projects on mount
+  // Fetch user's projects on mount (or single project if projectId is provided)
   useEffect(() => {
     async function fetchProjects() {
       console.log('🔍 ProjectOverview - Attempting to fetch projects...')
       console.log('👤 User:', user)
       console.log('🔑 Token in localStorage:', localStorage.getItem('token') ? 'EXISTS' : 'MISSING')
 
-      if (!user) {
-        console.warn('⚠️ No user found, skipping project fetch')
-        setLoading(false)
-        return
-      }
+      // if (!user) {
+      //   console.warn('⚠️ No user found, skipping project fetch')
+      //   setLoading(false)
+      //   return
+      // }
 
       try {
         setLoading(true)
         setError(null)
-        console.log(`📡 Fetching projects for current user`)
-        
-        const response = await getMyProjects()
-        console.log('📦 API Response:', response)
-        
-        if (response.success && response.data) {
-          console.log(`✅ Successfully loaded ${response.data.length} projects`)
-          setProjects(response.data)
+
+        if (projectId) {
+          console.log(`📡 Fetching single project: ${projectId}`)
+          const response = await getProjectById(projectId)
+          console.log('📦🙌🙌🙌🙌🙌 API Response:', response)
+          if (response.success && response.data) {
+            console.log(`✅ Successfully loaded project: ${response.data.name}`)
+            setProjects(response.data)
+          } else {
+            console.error('❌ API returned success=false or no data:', response)
+            setError(isRTL ? 'فشل في تحميل المشروع' : 'Failed to load project')
+          }
         } else {
-          console.error('❌ API returned success=false or no data:', response)
-          setError(isRTL ? 'فشل في تحميل المشاريع' : 'Failed to load projects')
+          console.log(`📡 Fetching projects for current user`)
+          const response = await getMyProjects()
+          console.log('📦 API Response:', response)
+          if (response.success && response.data) {
+            console.log(`✅ Successfully loaded ${response.data.length} projects`)
+            setProjects(response.data)
+          } else {
+            console.error('❌ API returned success=false or no data:', response)
+            setError(isRTL ? 'فشل في تحميل المشاريع' : 'Failed to load projects')
+          }
         }
       } catch (err: any) {
         console.error('❌ Error fetching projects:', err)
@@ -431,7 +627,7 @@ const ProjectOverview: FC = () => {
     }
 
     fetchProjects()
-  }, [user, isRTL])
+  }, [user, isRTL, projectId])
 
   const getStatusColor = (status: ProjectType['status']) => {
     switch (status) {
@@ -439,6 +635,7 @@ const ProjectOverview: FC = () => {
       case 'active': return '#0070F3'
       case 'pending': return '#FF8C00'
       case 'onhold': return '#666'
+      case 'cancelled': return '#FF4444'
       default: return '#666'
     }
   }
@@ -449,6 +646,7 @@ const ProjectOverview: FC = () => {
       completed: isRTL ? 'مكتمل' : 'Completed',
       pending: isRTL ? 'قيد الانتظار' : 'Pending',
       onhold: isRTL ? 'متوقف' : 'On Hold',
+      cancelled: isRTL ? 'ملغى' : 'Cancelled',
     }
     return statusMap[status] || status
   }
@@ -580,6 +778,7 @@ const ProjectOverview: FC = () => {
         </div>
       ) : (
         projects.map((project) => {
+          console.log('📊😶‍🌫️😶‍🌫️😶‍🌫️😶‍🌫️ Rendering project:', project)
           const overallProgress = calculateOverallProgress(project.progress || [])
           const milestones = getMilestones(project)
           
@@ -603,32 +802,90 @@ const ProjectOverview: FC = () => {
                   </span>
                   <button
                     className={styles.signBtn}
-                    style={{ marginInlineStart: 'auto', opacity: signLoadingId === project.id ? 0.6 : 1 }}
+                    style={{ marginInlineStart: 'auto' }}
                     aria-label={isRTL ? 'توقيع' : 'Sign'}
-                    disabled={signLoadingId === project.id}
-                    onClick={() => handleSign(project.id)}
+                    onClick={() => router.push(`/dashboard/contract/${project.id}`)}
                   >
-                    {signLoadingId === project.id ? '...' : 'Sign'}
+                    Sign
                   </button>
                 </div>
               )}
 
+              {/* Status reason notice — show when project is on-hold or cancelled */}
+              {(project.status === 'onhold' || project.status === 'cancelled') && (() => {
+                const lastChange = [...(project.status_changes || [])]
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .find(c => c.status === project.status)
+                if (!lastChange?.reason) return null
+                const isCancelled = project.status === 'cancelled'
+                return (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    background: isCancelled ? 'rgba(255, 68, 68, 0.08)' : 'rgba(148, 163, 184, 0.08)',
+                    border: `1px solid ${isCancelled ? 'rgba(255, 68, 68, 0.25)' : 'rgba(148, 163, 184, 0.25)'}`,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    direction: isRTL ? 'rtl' : 'ltr',
+                  }}>
+                    <span style={{ fontSize: '1.1rem', lineHeight: '1.4' }}>
+                      {isCancelled ? '🚫' : '⏸️'}
+                    </span>
+                    <div>
+                      <span style={{
+                        display: 'block',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        color: isCancelled ? '#FF4444' : '#94a3b8',
+                        marginBottom: '2px',
+                      }}>
+                        {isCancelled
+                          ? (isRTL ? 'سبب الإلغاء' : 'Cancellation Reason')
+                          : (isRTL ? 'سبب الإيقاف' : 'On-Hold Reason')}
+                      </span>
+                      <span style={{
+                        fontSize: '0.85rem',
+                        color: 'var(--text-white)',
+                        lineHeight: '1.5',
+                      }}>
+                        {lastChange.reason}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
+
               {/* Progress Line Bar */}
               {project.progress && project.progress.length > 0 && (
                 <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-                  {/* <h4 style={{
-                    fontSize: '0.9rem',
-                    color: 'var(--text-dim)',
-                    marginBottom: '8px',
-                    textAlign: isRTL ? 'right' : 'left'
-                  }}>
-                    {isRTL ? 'مراحل المشروع' : 'Project Phases'}
-                  </h4> */}
                   <ReadOnlyProgressBar
                     items={project.progress}
                     completedIds={project.progress_completed || []}
                     isRTL={isRTL}
                     isFinished={project.status === 'completed'}
+                    hasSigned={project.has_signed}
+                  />
+                </div>
+              )}
+
+              {/* Deadline Timeline */}
+              {project.start_date && project.duration > 0 && (
+                <div style={{
+                  marginTop: project.progress && project.progress.length > 0 ? '0' : '20px',
+                  marginBottom: '16px',
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  <DeadlineTimeline
+                    startDate={project.start_date}
+                    duration={project.duration}
+                    statusChanges={project.status_changes || []}
+                    currentStatus={project.status}
+                    isRTL={isRTL}
                   />
                 </div>
               )}
@@ -643,9 +900,9 @@ const ProjectOverview: FC = () => {
                   <span className={styles.statValue}>${Number(project.spent).toLocaleString()}</span>
                 </div>
                 <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
-                  <span className={styles.statLabel}>{t.project.deadline}</span>
+                  <span className={styles.statLabel}>{isRTL ? 'المدة' : 'Duration'}</span>
                   <span className={styles.statValue}>
-                    {new Date(project.deadline).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}
+                    {project.duration ? `${project.duration} ${isRTL ? 'يوم' : 'days'}` : '-'}
                   </span>
                 </div>
                 {project.priority && (
@@ -661,6 +918,45 @@ const ProjectOverview: FC = () => {
                     </span>
                   </div>
                 )}
+
+
+                <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gridColumn: '1 / -1', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => router.push(`/dashboard/contract/${project.id}`)}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(20, 184, 166, 0.35)',
+                      background: 'rgba(20, 184, 166, 0.1)',
+                      color: '#14b8a6',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = 'rgba(20,184,166,0.2)'
+                      ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(20,184,166,0.6)'
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = 'rgba(20,184,166,0.1)'
+                      ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(20,184,166,0.35)'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <polyline points="10 9 9 9 8 9" />
+                    </svg>
+                    {isRTL ? 'عرض العقد' : 'View Contract'}
+                  </button>
+                </div>
+                
               </div>
             </div>
           )

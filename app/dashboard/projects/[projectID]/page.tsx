@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import ProjectOverview from '@/components/Dashboard/ProjectOverview'
 import AnalyticsDashboard from '@/components/Dashboard/AnalyticsDashboard'
 import FinancialDashboard from '@/components/Dashboard/FinancialDashboard'
@@ -9,6 +10,7 @@ import SupportCenter from '@/components/Dashboard/SupportCenter'
 import ContractDashboard from '@/components/Dashboard/ContractDashboard'
 import DashboardSettings from '@/components/Dashboard/DashboardSettings'
 import styles from '@/components/Dashboard/Dashboard.module.css'
+import headerStyles from '../../../../components/Header/Header.module.css'
 import ThemeSwitcher from '@/components/UI/ThemeSwitcher'
 import { useTheme } from '@/hooks/useTheme'
 import { LanguageProvider, useLanguage } from '@/hooks/useLanguage'
@@ -32,6 +34,8 @@ interface DashboardSettingsType {
 
 function DashboardContent() {
   const router = useRouter()
+  const params = useParams()
+  const projectId = params.projectID as string
   // Use translations hook
   const { t, language, setLanguage, dir } = useLanguage()
   const { user, isAuthenticated, isLoading, logout } = useGlobalAuth()
@@ -61,33 +65,7 @@ function DashboardContent() {
     ['project']
   )
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login')
-    }
-  }, [isAuthenticated, isLoading, router])
-
   // All hooks are above — now we can do conditional returns
-
-  // Show loading state while checking authentication
-  if (isLoading) {
-    return (
-      <div className={styles.dashboard} style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        minHeight: '100vh'
-      }}>
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    )
-  }
-
-  // If not authenticated, return null (router will redirect)
-  if (!isAuthenticated || !user) {
-    return null
-  }
 
   // Filter sections based on user permissions (you can customize this based on user.role)
   const availableSections = sectionsList
@@ -171,21 +149,15 @@ function DashboardContent() {
               <span style={{ color: '#7042f8', fontWeight: 600 }}>{user.role}</span>
             </div>
           )}
-          
-          <button
-            className={styles.settingsBtn}
-            onClick={() => setShowSettings(true)}
-          >
-            ⚙️ {t.dashboard.settings}
-          </button>
 
           {/* Logout Button */}
-          <button
-            className={styles.settingsBtn}
-            onClick={() => {
-              logout()
-              router.push('/login')
-            }}
+          {user ? (
+            <button
+              className={styles.settingsBtn}
+              onClick={() => {
+                logout()
+                router.push('/login')
+              }}
             style={{ 
               background: 'rgba(255, 68, 68, 0.1)', 
               borderColor: 'rgba(255, 68, 68, 0.2)',
@@ -193,7 +165,11 @@ function DashboardContent() {
             }}
           >
             {t.login.logout}
-          </button>
+          </button>) : (
+            <Link href="/login" className={headerStyles.loginBtn}>
+              Login
+            </Link>
+          )}
         </div>
       </div>
 
@@ -202,7 +178,7 @@ function DashboardContent() {
           if (!enabledSectionIds.includes(section.id)) return null
           
           const Component = section.component
-          return <Component key={section.id} />
+          return <Component key={section.id} {...(section.id === 'project' ? { projectId } : {})} />
         })}
       </div>
 

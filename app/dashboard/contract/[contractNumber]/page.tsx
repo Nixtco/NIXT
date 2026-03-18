@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import ContractDashboard from '@/components/Dashboard/ContractDashboard'
 import styles from '@/components/Dashboard/Dashboard.module.css'
 import ThemeSwitcher from '@/components/UI/ThemeSwitcher'
@@ -11,6 +11,8 @@ import { useGlobalAuth } from '@/lib/auth-context'
 
 function ContractPageContent() {
   const router = useRouter()
+  const params = useParams()
+  const contractNumber = params.contractNumber as string
   const { t, language, setLanguage, dir } = useLanguage()
   const { user, isAuthenticated, isLoading, logout } = useGlobalAuth()
   const { nextTheme, setTheme, currentTheme } = useTheme()
@@ -105,7 +107,7 @@ function ContractPageContent() {
       </div>
 
       <div className={styles.dashboardContent}>
-        <ContractDashboard />
+        <ContractDashboard contractNumber={contractNumber} />
       </div>
 
       <ThemeSwitcher 

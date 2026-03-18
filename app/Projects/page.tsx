@@ -40,12 +40,14 @@ function StatusBadge({ status, isRTL }: { status: string; isRTL: boolean }) {
     pending: '#FF8C00',
     completed: '#0070F3',
     onhold: '#94a3b8',
+    cancelled: '#FF4444',
   }
   const labels: Record<string, { ar: string; en: string }> = {
     active: { ar: 'نشط', en: 'Active' },
     pending: { ar: 'معلق', en: 'Pending' },
     completed: { ar: 'مكتمل', en: 'Completed' },
     onhold: { ar: 'متوقف', en: 'On Hold' },
+    cancelled: { ar: 'ملغى', en: 'Cancelled' },
   }
   return (
     <span
@@ -115,7 +117,8 @@ function ProjectsContent() {
   const [newName, setNewName] = useState('')
   const [newUserId, setNewUserId] = useState('')
   const [newPrice, setNewPrice] = useState('')
-  const [newDeadline, setNewDeadline] = useState('')
+  const [newDuration, setNewDuration] = useState('')
+  const [newStartDate, setNewStartDate] = useState('')
   const [newPriority, setNewPriority] = useState<Project['priority']>('medium')
   const [newStatus, setNewStatus] = useState<Project['status']>('pending')
 
@@ -123,7 +126,9 @@ function ProjectsContent() {
   const [editName, setEditName] = useState('')
   const [editPrice, setEditPrice] = useState('')
   const [editSpent, setEditSpent] = useState('')
-  const [editDeadline, setEditDeadline] = useState('')
+  const [editDuration, setEditDuration] = useState('')
+  const [editStartDate, setEditStartDate] = useState('')
+  const [editStatusReason, setEditStatusReason] = useState('')
   const [editPriority, setEditPriority] = useState<Project['priority']>('medium')
   const [editStatus, setEditStatus] = useState<Project['status']>('pending')
 
@@ -219,16 +224,17 @@ function ProjectsContent() {
   // ==================== CRUD Handlers ====================
 
   const handleCreateProject = async () => {
-    if (!newName || !newUserId || !newPrice || !newDeadline) return
+    if (!newName || !newUserId || !newPrice) return
     try {
       setActionLoading(true)
       const payload: CreateProjectPayload = {
         name: newName,
         user_id: newUserId,
         price: parseFloat(newPrice),
-        deadline: new Date(newDeadline).toISOString(),
         priority: newPriority,
         status: newStatus,
+        ...(newDuration ? { duration: parseInt(newDuration) } : {}),
+        ...(newStartDate ? { start_date: new Date(newStartDate).toISOString() } : {}),
       }
       const res = await createProject(payload)
       if (res.success) {
@@ -249,12 +255,17 @@ function ProjectsContent() {
     try {
       setActionLoading(true)
       const payload: UpdateProjectPayload = {}
-      if (editName !== editingProject.name) payload.name = editName
-      if (parseFloat(editPrice) !== editingProject.price) payload.price = parseFloat(editPrice)
+      const isSigned = editingProject.has_signed
+      if (!isSigned && editName !== editingProject.name) payload.name = editName
+      if (!isSigned && parseFloat(editPrice) !== editingProject.price) payload.price = parseFloat(editPrice)
       if (parseFloat(editSpent) !== editingProject.spent) payload.spent = parseFloat(editSpent)
-      if (editDeadline !== editingProject.deadline.split('T')[0]) payload.deadline = new Date(editDeadline).toISOString()
+      if (editDuration && parseInt(editDuration) !== editingProject.duration) payload.duration = parseInt(editDuration)
+      if (editStartDate && !editingProject.start_date) payload.start_date = new Date(editStartDate).toISOString()
       if (editPriority !== editingProject.priority) payload.priority = editPriority
-      if (editStatus !== editingProject.status) payload.status = editStatus
+      if (editStatus !== editingProject.status) {
+        payload.status = editStatus
+        if (editStatusReason) payload.status_reason = editStatusReason
+      }
 
       if (Object.keys(payload).length === 0) {
         setEditingProject(null)
@@ -369,7 +380,8 @@ function ProjectsContent() {
     setNewName('')
     setNewUserId('')
     setNewPrice('')
-    setNewDeadline('')
+    setNewDuration('')
+    setNewStartDate('')
     setNewPriority('medium')
     setNewStatus('pending')
   }
@@ -379,7 +391,9 @@ function ProjectsContent() {
     setEditName(project.name)
     setEditPrice(project.price.toString())
     setEditSpent(project.spent.toString())
-    setEditDeadline(project.deadline.split('T')[0])
+    setEditDuration(project.duration?.toString() || '')
+    setEditStartDate(project.start_date ? project.start_date.split('T')[0] : '')
+    setEditStatusReason('')
     setEditPriority(project.priority)
     setEditStatus(project.status)
   }
@@ -405,7 +419,7 @@ function ProjectsContent() {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat(isRTL ? 'ar-SA' : 'en-US', {
       style: 'currency',
-      currency: 'SAR',
+      currency: 'USD',
       minimumFractionDigits: 0,
     }).format(amount)
   }
@@ -644,6 +658,7 @@ function ProjectsContent() {
           <option value="pending">{isRTL ? 'معلق' : 'Pending'}</option>
           <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
           <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+          <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
         </select>
 
         {/* Priority Filter */}
@@ -747,7 +762,7 @@ function ProjectsContent() {
                   <p className={styles.projectClient}>
                     <PriorityBadge priority={project.priority} isRTL={isRTL} />
                     <span style={{ marginInlineStart: '8px', color: '#94a3b8', fontSize: '0.85rem' }}>
-                      {formatDate(project.deadline)}
+                      {project.duration} {isRTL ? 'يوم' : 'days'}
                     </span>
                   </p>
 
@@ -812,7 +827,7 @@ function ProjectsContent() {
                   <th>{isRTL ? 'التقدم' : 'Progress'}</th>
                   <th>{isRTL ? 'الميزانية' : 'Budget'}</th>
                   <th>{isRTL ? 'المصروف' : 'Spent'}</th>
-                  <th>{isRTL ? 'الموعد النهائي' : 'Deadline'}</th>
+                  <th>{isRTL ? 'المدة (أيام)' : 'Duration (days)'}</th>
                   <th>{isRTL ? 'الفريق' : 'Team'}</th>
                   <th>{isRTL ? 'الإجراءات' : 'Actions'}</th>
                 </tr>
@@ -835,7 +850,7 @@ function ProjectsContent() {
                       </td>
                       <td style={{ color: '#00C781' }}>{formatCurrency(project.price)}</td>
                       <td style={{ color: '#FF8C00' }}>{formatCurrency(project.spent)}</td>
-                      <td>{formatDate(project.deadline)}</td>
+                      <td>{project.duration} {isRTL ? 'يوم' : 'days'}</td>
                       <td>👥 {project.team.length}</td>
                       <td>
                         <div className={styles.actionButtons}>
@@ -919,7 +934,7 @@ function ProjectsContent() {
                 />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'السعر (ر.س) *' : 'Price (SAR) *'}</label>
+                <label>{isRTL ? 'السعر (ر.س) *' : 'Price (USD) *'}</label>
                 <input
                   className={styles.formInput}
                   type="number"
@@ -930,12 +945,23 @@ function ProjectsContent() {
                 />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'الموعد النهائي *' : 'Deadline *'}</label>
+                <label>{isRTL ? 'المدة (أيام)' : 'Duration (days)'}</label>
+                <input
+                  className={styles.formInput}
+                  type="number"
+                  min="1"
+                  value={newDuration}
+                  onChange={(e) => setNewDuration(e.target.value)}
+                  placeholder="45"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>{isRTL ? 'تاريخ البدء' : 'Start Date'}</label>
                 <input
                   className={styles.formInput}
                   type="date"
-                  value={newDeadline}
-                  onChange={(e) => setNewDeadline(e.target.value)}
+                  value={newStartDate}
+                  onChange={(e) => setNewStartDate(e.target.value)}
                 />
               </div>
               <div className={styles.formGroup}>
@@ -962,6 +988,7 @@ function ProjectsContent() {
                   <option value="active">{isRTL ? 'نشط' : 'Active'}</option>
                   <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
                   <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+                  <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
                 </select>
               </div>
             </div>
@@ -973,8 +1000,8 @@ function ProjectsContent() {
               <button
                 className={styles.primaryBtn}
                 onClick={handleCreateProject}
-                disabled={actionLoading || !newName || !newUserId || !newPrice || !newDeadline}
-                style={{ opacity: actionLoading || !newName || !newUserId || !newPrice || !newDeadline ? 0.5 : 1 }}
+                disabled={actionLoading || !newName || !newUserId || !newPrice}
+                style={{ opacity: actionLoading || !newName || !newUserId || !newPrice ? 0.5 : 1 }}
               >
                 {actionLoading ? (isRTL ? 'جاري الإنشاء...' : 'Creating...') : (isRTL ? 'إنشاء المشروع' : 'Create Project')}
               </button>
@@ -999,22 +1026,36 @@ function ProjectsContent() {
               </button>
             </div>
 
+            {editingProject.has_signed && (
+              <div style={{
+                padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: '10px',
+                background: 'rgba(255, 140, 0, 0.1)', border: '1px solid rgba(255, 140, 0, 0.2)',
+                color: '#FF8C00', fontSize: '0.85rem',
+              }}>
+                ⚠️ {isRTL ? 'العقد المرتبط بهذا المشروع تم التوقيع عليه. لا يمكن تعديل الاسم أو السعر.' : 'The linked contract is signed. Name and price cannot be edited.'}
+              </div>
+            )}
+
             <div className={styles.formGrid}>
               <div className={styles.formGroup}>
                 <label>{isRTL ? 'اسم المشروع' : 'Project Name'}</label>
-                <input className={styles.formInput} type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                <input className={styles.formInput} type="text" value={editName} onChange={(e) => setEditName(e.target.value)} disabled={editingProject.has_signed} style={{ opacity: editingProject.has_signed ? 0.5 : 1 }} />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'السعر (ر.س)' : 'Price (SAR)'}</label>
-                <input className={styles.formInput} type="number" min="0" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
+                <label>{isRTL ? 'السعر (ر.س)' : 'Price (USD)'}</label>
+                <input className={styles.formInput} type="number" min="0" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} disabled={editingProject.has_signed} style={{ opacity: editingProject.has_signed ? 0.5 : 1 }} />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'المصروف (ر.س)' : 'Spent (SAR)'}</label>
+                <label>{isRTL ? 'المصروف (ر.س)' : 'Spent (USD)'}</label>
                 <input className={styles.formInput} type="number" min="0" value={editSpent} onChange={(e) => setEditSpent(e.target.value)} />
               </div>
               <div className={styles.formGroup}>
-                <label>{isRTL ? 'الموعد النهائي' : 'Deadline'}</label>
-                <input className={styles.formInput} type="date" value={editDeadline} onChange={(e) => setEditDeadline(e.target.value)} />
+                <label>{isRTL ? 'المدة (أيام)' : 'Duration (days)'}</label>
+                <input className={styles.formInput} type="number" min="1" value={editDuration} onChange={(e) => setEditDuration(e.target.value)} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>{isRTL ? 'تاريخ البدء' : 'Start Date'} {editingProject.start_date ? (isRTL ? '(مقفل)' : '(locked)') : ''}</label>
+                <input className={styles.formInput} type="date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} disabled={!!editingProject.start_date} style={{ opacity: editingProject.start_date ? 0.5 : 1 }} />
               </div>
               <div className={styles.formGroup}>
                 <label>{isRTL ? 'الأولوية' : 'Priority'}</label>
@@ -1032,8 +1073,15 @@ function ProjectsContent() {
                   <option value="active">{isRTL ? 'نشط' : 'Active'}</option>
                   <option value="completed">{isRTL ? 'مكتمل' : 'Completed'}</option>
                   <option value="onhold">{isRTL ? 'متوقف' : 'On Hold'}</option>
+                  <option value="cancelled">{isRTL ? 'ملغى' : 'Cancelled'}</option>
                 </select>
               </div>
+              {editStatus !== editingProject.status && (
+                <div className={styles.formGroup}>
+                  <label>{isRTL ? 'سبب تغيير الحالة' : 'Status Change Reason'}</label>
+                  <input className={styles.formInput} type="text" value={editStatusReason} onChange={(e) => setEditStatusReason(e.target.value)} placeholder={isRTL ? 'اختياري...' : 'Optional...'} />
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
@@ -1101,15 +1149,23 @@ function ProjectsContent() {
               </div>
               <div>
                 <span style={{ color: '#94a3b8', fontSize: '0.8rem', display: 'block', marginBottom: '4px' }}>
-                  {isRTL ? 'الموعد النهائي' : 'Deadline'}
+                  {isRTL ? 'المدة (أيام)' : 'Duration (days)'}
                 </span>
-                <span style={{ color: '#fff', fontWeight: 600 }}>{formatDate(viewingProject.deadline)}</span>
+                <span style={{ color: '#fff', fontWeight: 600 }}>{viewingProject.duration} {isRTL ? 'يوم' : 'days'}</span>
               </div>
+              {viewingProject.start_date && (
+                <div>
+                  <span style={{ color: '#94a3b8', fontSize: '0.8rem', display: 'block', marginBottom: '4px' }}>
+                    {isRTL ? 'تاريخ البدء' : 'Start Date'}
+                  </span>
+                  <span style={{ color: '#fff', fontWeight: 600 }}>{formatDate(viewingProject.start_date)}</span>
+                </div>
+              )}
               <div>
                 <span style={{ color: '#94a3b8', fontSize: '0.8rem', display: 'block', marginBottom: '4px' }}>
                   {isRTL ? 'الفريق' : 'Team'}
                 </span>
-                <span style={{ color: '#fff', fontWeight: 600 }}>👥 {viewingProject.team.length} {isRTL ? 'أعضاء' : 'members'}</span>
+                <span style={{ color: '#fff', fontWeight: 600 }}>👥 {viewingProject.team?.length} {isRTL ? 'أعضاء' : 'members'}</span>
               </div>
             </div>
 
@@ -1120,14 +1176,14 @@ function ProjectsContent() {
                 {isRTL ? 'مراحل التقدم' : 'Progress Phases'}
               </h3>
 
-              {viewingProject.progress.length === 0 ? (
+              {viewingProject.progress?.length === 0 ? (
                 <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
                   {isRTL ? 'لا توجد مراحل مضافة بعد' : 'No progress phases added yet'}
                 </p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {viewingProject.progress.map((item) => {
-                    const isCompleted = viewingProject.progress_completed.includes(item.id)
+                  {viewingProject.progress?.map((item) => {
+                    const isCompleted = viewingProject.progress_completed?.includes(item.id)
                     return (
                       <div key={item.id} style={{
                         display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem',

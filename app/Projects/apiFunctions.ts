@@ -8,6 +8,12 @@ export interface ProgressItem {
   percent: number
 }
 
+export interface StatusChange {
+  status: string
+  timestamp: string
+  reason: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -17,9 +23,11 @@ export interface Project {
   price: number
   spent: number
   priority: 'low' | 'medium' | 'high' | 'urgent'
-  status: 'active' | 'pending' | 'completed' | 'onhold'
-  deadline: string
+  status: 'active' | 'pending' | 'completed' | 'onhold' | 'cancelled'
+  duration: number
   team: string[]
+  start_date: string | null
+  status_changes: StatusChange[]
   has_signed: boolean
   created_at: string
   updated_at: string
@@ -47,6 +55,7 @@ export interface ProjectStatistics {
       pending: number
       completed: number
       onhold: number
+      cancelled: number
     }
   }
 }
@@ -66,9 +75,10 @@ export interface CreateProjectPayload {
   price: number
   spent?: number
   priority?: 'low' | 'medium' | 'high' | 'urgent'
-  status?: 'active' | 'pending' | 'completed' | 'onhold'
-  deadline: string
+  status?: 'active' | 'pending' | 'completed' | 'onhold' | 'cancelled'
+  duration?: number
   team?: string[]
+  start_date?: string
 }
 
 export interface UpdateProjectPayload {
@@ -78,10 +88,12 @@ export interface UpdateProjectPayload {
   price?: number
   spent?: number
   priority?: 'low' | 'medium' | 'high' | 'urgent'
-  status?: 'active' | 'pending' | 'completed' | 'onhold'
-  deadline?: string
+  status?: 'active' | 'pending' | 'completed' | 'onhold' | 'cancelled'
+  duration?: number
   team?: string[]
   has_signed?: boolean
+  start_date?: string
+  status_reason?: string
 }
 
 export interface GetProjectsParams {
@@ -89,7 +101,7 @@ export interface GetProjectsParams {
   offset?: number
   order?: string
   search?: string
-  status?: 'active' | 'pending' | 'completed' | 'onhold'
+  status?: 'active' | 'pending' | 'completed' | 'onhold' | 'cancelled'
   priority?: 'low' | 'medium' | 'high' | 'urgent'
   user_id?: string
 }

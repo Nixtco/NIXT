@@ -1,10 +1,32 @@
+import { generateMandatoryClauses } from './mandatoryClauses'
+
+interface ContractClause {
+  title: string
+  description: string
+}
+
 interface ContractHTMLParams {
   clientName: string
   clientEmail: string
   projectDesc: string
+  projectName?: string
   contractNumber: string
   formattedDate: string
   year: number
+  price?: number
+  payNumber?: number
+  clauses?: ContractClause[]
+  projectDetails?: ContractClause[]
+  projectDuration?: number | null
+  projectDurationUnit?: string | null
+  revisionsAllowed?: number | null
+  warrantyPeriod?: number | null
+  autoCancelDays?: number | null
+  progressTolerance?: number | null
+  delayCompensation?: number | null
+  clientFaultRefund?: number | null
+  progressTimelineLink?: string | null
+  clientSignatureImage?: string | null
   theme?: {
     accent?: string
     accentDark?: string
@@ -17,27 +39,50 @@ export function generateContractHTML({
   clientName,
   clientEmail,
   projectDesc,
+  projectName,
   contractNumber,
   formattedDate,
   year,
+  price: priceParam,
+  payNumber: payNumberParam,
+  clauses: clausesParam,
+  projectDetails: projectDetailsParam,
+  projectDuration,
+  projectDurationUnit,
+  revisionsAllowed,
+  warrantyPeriod,
+  autoCancelDays,
+  progressTolerance,
+  delayCompensation,
+  clientFaultRefund,
+  progressTimelineLink,
+  clientSignatureImage,
   theme,
 }: ContractHTMLParams): string {
   const accent = theme?.accent || '#14b8a6'
   const accentDark = theme?.accentDark || '#0d9488'
   const accentRgb = theme?.accentRgb || '20, 184, 166'
+  const contractPrice = priceParam ?? 450
+  const payNumber = payNumberParam ?? 2
+  const paymentPerInstallment = payNumber > 0 ? contractPrice / payNumber : contractPrice
+  const displayProjectName = projectName || 'تصميم وتطوير موقع إلكتروني'
 
-  const clauses = [
-    { title: 'نطاق العمل', content: 'يلتزم الطرف الأول (شركة NIXT) بتقديم خدمة تصميم وتطوير موقع إلكتروني احترافي وفقاً للمواصفات المتفق عليها بين الطرفين، ويشمل ذلك التصميم الجذاب، البرمجة، والتجربة المتكاملة على جميع الأجهزة.' },
-    { title: 'قيمة العقد', content: 'يلتزم الطرف الثاني بدفع مبلغ قدره 450 دولار أمريكي (أربعمائة وخمسون دولاراً) مقابل الخدمات المذكورة أعلاه. يتم الدفع وفقاً لجدول الدفع المحدد في هذا العقد.' },
-    { title: 'جدول الدفع', content: 'يتم الدفع على دفعتين: الدفعة الأولى بنسبة 50% (225$) عند توقيع العقد والبدء بالعمل، والدفعة الثانية بنسبة 50% (225$) عند تسليم المشروع بشكل نهائي واعتماده من الطرف الثاني.' },
-    { title: 'مدة التنفيذ', content: 'يلتزم الطرف الأول بإنجاز المشروع خلال مدة متفق عليها بين الطرفين تبدأ من تاريخ استلام الدفعة الأولى واعتماد متطلبات المشروع النهائية.' },
-    { title: 'حقوق الملكية', content: 'تنتقل جميع حقوق الملكية الفكرية للموقع إلى الطرف الثاني بعد استكمال الدفع الكامل. قبل ذلك، تبقى جميع الحقوق محفوظة لشركة NIXT.' },
-    { title: 'التعديلات', content: 'يحق للطرف الثاني طلب تعديلات على التصميم بحد أقصى جولتين من التعديلات مجاناً. أي تعديلات إضافية بعد ذلك ستكون بتكلفة إضافية يتم الاتفاق عليها.' },
-    { title: 'الدعم الفني', content: 'يقدم الطرف الأول دعماً فنياً مجانياً لمدة 30 يوماً بعد تسليم المشروع، يشمل إصلاح الأخطاء البرمجية. لا يشمل الدعم إضافة ميزات جديدة.' },
-    { title: 'السرية', content: 'يلتزم كلا الطرفين بالحفاظ على سرية جميع المعلومات والبيانات المتبادلة خلال فترة تنفيذ المشروع وبعدها، ولا يجوز لأي طرف إفشاء معلومات الطرف الآخر دون موافقة خطية.' },
-    { title: 'إنهاء العقد', content: 'يحق لأي طرف إنهاء هذا العقد بإشعار خطي مدته 7 أيام. في حال الإنهاء، يستحق الطرف الأول أتعاباً عن الأعمال المنجزة حتى تاريخ الإنهاء.' },
-    { title: 'حل النزاعات', content: 'في حال نشوء أي خلاف بين الطرفين، يتم حله ودياً أولاً. وفي حال تعذر ذلك، يتم اللجوء إلى التحكيم وفقاً للقوانين والأنظمة المعمول بها.' },
-  ]
+  const defaultClauses = generateMandatoryClauses({
+    price: contractPrice,
+    payNumber,
+    projectDuration,
+    projectDurationUnit,
+    progressTolerance,
+    autoCancelDays,
+    delayCompensation,
+    clientFaultRefund,
+    warrantyPeriod,
+    revisionsAllowed,
+  }).map(c => ({ title: c.title, content: c.description }))
+
+  const clauses = (clausesParam && clausesParam.length > 0)
+    ? clausesParam.map(c => ({ title: c.title, content: c.description }))
+    : defaultClauses
 
   const clausesHTML = clauses.map((c, i) => `
     <div style="padding:12px 15px;border:1px solid #f0ebe0;border-radius:8px;background:#fefdfb;margin-bottom:8px;break-inside:avoid;">
@@ -48,6 +93,19 @@ export function generateContractHTML({
       <p style="margin:0;padding-right:5px;font-size:12px;line-height:2;color:#444;">${c.content}</p>
     </div>
   `).join('')
+
+  const projectDetailsHTML = (projectDetailsParam && projectDetailsParam.length > 0)
+    ? `<div class="section-title">تفاصيل المشروع</div>
+    ${projectDetailsParam.map((d, i) => `
+    <div style="padding:12px 15px;border:1px solid #f0ebe0;border-radius:8px;background:#fefdfb;margin-bottom:8px;break-inside:avoid;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="font-size:9px;font-weight:700;color:${accent};border:1px solid ${accent};padding:2px 10px;border-radius:20px;white-space:nowrap;">${i + 1}</span>
+        <span style="font-size:13px;font-weight:700;color:#1a1a2e;">${d.title}</span>
+      </div>
+      <p style="margin:0;padding-right:5px;font-size:12px;line-height:2;color:#444;">${d.description}</p>
+    </div>
+  `).join('')}`
+    : ''
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -139,12 +197,12 @@ export function generateContractHTML({
       <div class="logo-sub">Digital Solutions</div>
       <div class="ornament"><span class="ornament-line"></span><span class="ornament-diamond">◆</span><span class="ornament-line"></span></div>
       <div class="title">عقد اتفاق لتقديم خدمات</div>
-      <div class="subtitle">تصميم وتطوير موقع إلكتروني</div>
+      <div class="subtitle">${displayProjectName}</div>
       <div class="ornament"><span class="ornament-line"></span><span class="ornament-diamond">◆</span><span class="ornament-line"></span></div>
       <div class="meta-bar">
         <div class="meta-item"><span class="meta-label">رقم العقد</span><span class="meta-value">${contractNumber}</span></div>
         <div class="meta-item"><span class="meta-label">تاريخ التحرير</span><span class="meta-value">${formattedDate}</span></div>
-        <div class="meta-item"><span class="meta-label">قيمة العقد</span><span class="meta-value meta-gold">$450</span></div>
+        <div class="meta-item"><span class="meta-label">قيمة العقد</span><span class="meta-value meta-gold">$${contractPrice}</span></div>
       </div>
     </div>
     <div class="section-title">أطراف العقد</div>
@@ -170,14 +228,34 @@ export function generateContractHTML({
     <div class="intro-text">تم الاتفاق بين الطرفين المذكورين أعلاه على البنود والشروط التالية، وذلك بناءً على رغبة الطرف الثاني في الحصول على خدمة تصميم وتطوير موقع إلكتروني من الطرف الأول (شركة NIXT)، وقد تراضى الطرفان على ما يلي:</div>
     <div class="section-title">بنود وشروط العقد</div>
     ${clausesHTML}
+    ${projectDetailsHTML}
+    ${(() => {
+      const rows: string[] = []
+      if (projectDuration != null) {
+        const unitLabel = projectDurationUnit === 'days' ? 'يوم' : projectDurationUnit === 'weeks' ? 'أسبوع' : projectDurationUnit === 'months' ? 'شهر' : projectDurationUnit || 'يوم'
+        rows.push(`<tr><td>⏱️ مدة التنفيذ</td><td class="amount">${projectDuration} ${unitLabel}</td></tr>`)
+      }
+      if (revisionsAllowed != null) rows.push(`<tr><td>✏️ عدد التعديلات المسموحة</td><td class="amount">${revisionsAllowed} تعديلات</td></tr>`)
+      if (warrantyPeriod != null) rows.push(`<tr><td>🛡️ فترة الضمان</td><td class="amount">${warrantyPeriod} أشهر</td></tr>`)
+      if (autoCancelDays != null) rows.push(`<tr><td>🚫 الإلغاء التلقائي بعد</td><td class="amount">${autoCancelDays} يوم</td></tr>`)
+      if (progressTolerance != null) rows.push(`<tr><td>📊 نسبة التسامح في التقدم</td><td class="amount">${progressTolerance}%</td></tr>`)
+      if (delayCompensation != null) rows.push(`<tr><td>⚖️ تعويض التأخير</td><td class="amount">${delayCompensation}%</td></tr>`)
+      if (clientFaultRefund != null) rows.push(`<tr><td>💸 نسبة الاسترداد (خطأ العميل)</td><td class="amount">${clientFaultRefund}%</td></tr>`)
+      if (progressTimelineLink) rows.push(`<tr><td>🔗 رابط متابعة سير المشروع</td><td class="amount"><a href="${progressTimelineLink}" target="_blank" style="color:${accent};text-decoration:underline;">فتح الرابط</a></td></tr>`)
+      if (rows.length === 0) return ''
+      return `<div class="section-title">تفاصيل إضافية للعقد</div>
+      <table class="finance-table">
+        <thead><tr><th>البيان</th><th class="amount-col">القيمة</th></tr></thead>
+        <tbody>${rows.join('\n        ')}</tbody>
+      </table>`
+    })()}
     <div class="section-title">الملخص المالي</div>
     <table class="finance-table">
       <thead><tr><th>البيان</th><th class="amount-col">المبلغ</th></tr></thead>
       <tbody>
-        <tr><td>خدمة تصميم وتطوير الموقع الإلكتروني</td><td class="amount">$450.00</td></tr>
-        <tr><td class="sub-item">↩ الدفعة الأولى (عند التوقيع - 50%)</td><td class="amount sub-amount">$225.00</td></tr>
-        <tr><td class="sub-item">↩ الدفعة الثانية (عند التسليم - 50%)</td><td class="amount sub-amount">$225.00</td></tr>
-        <tr class="total-row"><td>الإجمالي المستحق</td><td class="amount total-amount">$450.00</td></tr>
+        <tr><td>${displayProjectName}</td><td class="amount">$${contractPrice.toFixed(2)}</td></tr>
+        ${Array.from({ length: payNumber }, (_, i) => `<tr><td class="sub-item">↩ الدفعة ${i + 1} ${i === 0 ? '(عند التوقيع)' : i === payNumber - 1 ? '(عند التسليم)' : ''}</td><td class="amount sub-amount">$${paymentPerInstallment.toFixed(2)}</td></tr>`).join('\n        ')}
+        <tr class="total-row"><td>الإجمالي المستحق</td><td class="amount total-amount">$${contractPrice.toFixed(2)}</td></tr>
       </tbody>
     </table>
     <div class="section-title">التوقيع والإقرار</div>
@@ -191,7 +269,9 @@ export function generateContractHTML({
       </div>
       <div class="sig-box">
         <div class="sig-label">توقيع الطرف الثاني</div>
-        <div class="sig-area"><div class="sig-client">${clientName || ''}</div></div>
+        <div class="sig-area">
+          ${clientSignatureImage ? `<img src="${clientSignatureImage}" alt="Client Signature" style="max-width: 100%; max-height: 50px; object-fit: contain;" />` : `<div class="sig-client">${clientName || ''}</div>`}
+        </div>
         <div class="sig-name">${clientName || '—'}</div>
         <div class="sig-date">التاريخ: ${formattedDate}</div>
       </div>

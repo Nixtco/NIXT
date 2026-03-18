@@ -4,6 +4,8 @@ import { forwardRef } from 'react'
 import { createPortal } from 'react-dom'
 import styles from './PrintableContractView.module.css'
 import { generateContractHTML } from '@/utils/contractHTML'
+import { generateMandatoryClauses } from '@/utils/mandatoryClauses'
+import { type Contract } from '@/app/dashboard/contract/[contractNumber]/apiFunctions'
 
 interface Theme {
   accent: string
@@ -12,71 +14,104 @@ interface Theme {
   [key: string]: string
 }
 
+interface ContractClauseData {
+  title: string
+  description: string
+}
+
 interface PrintableContractViewProps {
   clientName: string
   clientEmail: string
   projectDesc: string
+  project?: Contract
+  projectName?: string
   contractNumber: string
   formattedDate: string
+  price?: number
+  payNumber?: number
+  clauses?: ContractClauseData[]
+  projectDetails?: ContractClauseData[]
+  projectDuration?: number | null
+  projectDurationUnit?: string | null
+  revisionsAllowed?: number | null
+  warrantyPeriod?: number | null
+  autoCancelDays?: number | null
+  progressTolerance?: number | null
+  delayCompensation?: number | null
+  clientFaultRefund?: number | null
+  progressTimelineLink?: string | null
+  clientSignatureImage?: string | null
   theme: Theme
   onClose: () => void
 }
 
-const contractClausesData = [
-  {
-    title: 'نطاق العمل',
-    content: 'يلتزم الطرف الأول (شركة NIXT) بتقديم خدمة تصميم وتطوير موقع إلكتروني احترافي وفقاً للمواصفات المتفق عليها بين الطرفين، ويشمل ذلك التصميم الجذاب، البرمجة، والتجربة المتكاملة على جميع الأجهزة.',
-  },
-  {
-    title: 'قيمة العقد',
-    content: 'يلتزم الطرف الثاني بدفع مبلغ قدره 450 دولار أمريكي (أربعمائة وخمسون دولاراً) مقابل الخدمات المذكورة أعلاه. يتم الدفع وفقاً لجدول الدفع المحدد في هذا العقد.',
-  },
-  {
-    title: 'جدول الدفع',
-    content: 'يتم الدفع على دفعتين: الدفعة الأولى بنسبة 50% (225$) عند توقيع العقد والبدء بالعمل، والدفعة الثانية بنسبة 50% (225$) عند تسليم المشروع بشكل نهائي واعتماده من الطرف الثاني.',
-  },
-  {
-    title: 'مدة التنفيذ',
-    content: 'يلتزم الطرف الأول بإنجاز المشروع خلال مدة متفق عليها بين الطرفين تبدأ من تاريخ استلام الدفعة الأولى واعتماد متطلبات المشروع النهائية.',
-  },
-  {
-    title: 'حقوق الملكية',
-    content: 'تنتقل جميع حقوق الملكية الفكرية للموقع إلى الطرف الثاني بعد استكمال الدفع الكامل. قبل ذلك، تبقى جميع الحقوق محفوظة لشركة NIXT.',
-  },
-  {
-    title: 'التعديلات',
-    content: 'يحق للطرف الثاني طلب تعديلات على التصميم بحد أقصى جولتين من التعديلات مجاناً. أي تعديلات إضافية بعد ذلك ستكون بتكلفة إضافية يتم الاتفاق عليها.',
-  },
-  {
-    title: 'الدعم الفني',
-    content: 'يقدم الطرف الأول دعماً فنياً مجانياً لمدة 30 يوماً بعد تسليم المشروع، يشمل إصلاح الأخطاء البرمجية. لا يشمل الدعم إضافة ميزات جديدة.',
-  },
-  {
-    title: 'السرية',
-    content: 'يلتزم كلا الطرفين بالحفاظ على سرية جميع المعلومات والبيانات المتبادلة خلال فترة تنفيذ المشروع وبعدها، ولا يجوز لأي طرف إفشاء معلومات الطرف الآخر دون موافقة خطية.',
-  },
-  {
-    title: 'إنهاء العقد',
-    content: 'يحق لأي طرف إنهاء هذا العقد بإشعار خطي مدته 7 أيام. في حال الإنهاء، يستحق الطرف الأول أتعاباً عن الأعمال المنجزة حتى تاريخ الإنهاء.',
-  },
-  {
-    title: 'حل النزاعات',
-    content: 'في حال نشوء أي خلاف بين الطرفين، يتم حله ودياً أولاً. وفي حال تعذر ذلك، يتم اللجوء إلى التحكيم وفقاً للقوانين والأنظمة المعمول بها.',
-  },
-]
+const bufferToDataUrl = (bufferObj?: { type: string, data: number[] } | null): string | null => {
+  if (!bufferObj?.data) return null;
+  try {
+    const bytes = new Uint8Array(bufferObj.data);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.slice(i, i + chunkSize)));
+    }
+    return `data:image/png;base64,${btoa(binary)}`;
+  } catch (err) {
+    console.error('Error converting buffer to image', err);
+    return null;
+  }
+}
 
 const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewProps>(
-  ({ clientName, clientEmail, projectDesc, contractNumber, formattedDate, theme, onClose }, ref) => {
+  ({ clientName, clientEmail, projectDesc, project, projectName, contractNumber, formattedDate, price: priceParam, payNumber: payNumberParam, clauses: clausesParam, projectDetails: projectDetailsParam, projectDuration, projectDurationUnit, revisionsAllowed, warrantyPeriod, autoCancelDays, progressTolerance, delayCompensation, clientFaultRefund, progressTimelineLink, clientSignatureImage, theme, onClose }, ref) => {
     const year = new Date().getFullYear()
+    const contractPrice = priceParam ?? 450
+    const payNumber = payNumberParam ?? 2
+    const paymentPerInstallment = payNumber > 0 ? contractPrice / payNumber : contractPrice
+    const displayProjectName = projectName || 'تصميم وتطوير موقع إلكتروني'
+
+    console.log('Rendering PrintableContractView with props:', project)
+
+    clientSignatureImage = bufferToDataUrl(project?.signature_white || project?.signature_blue || project?.signature_black) || clientSignatureImage
+
+    // Use dynamic clauses from props or fall back to mandatory defaults
+    const displayClauses = (clausesParam && clausesParam.length > 0)
+      ? clausesParam.map(c => ({ title: c.title, content: c.description }))
+      : generateMandatoryClauses({
+          price: contractPrice,
+          payNumber,
+          projectDuration,
+          projectDurationUnit,
+          progressTolerance,
+          autoCancelDays,
+          delayCompensation,
+          clientFaultRefund,
+          warrantyPeriod,
+          revisionsAllowed,
+        }).map(c => ({ title: c.title, content: c.description }))
 
     const handleSavePDF = () => {
       const htmlContent = generateContractHTML({
         clientName,
         clientEmail,
         projectDesc,
+        projectName,
         contractNumber,
         formattedDate,
         year,
+        price: contractPrice,
+        payNumber,
+        clauses: clausesParam,
+        projectDetails: projectDetailsParam,
+        projectDuration,
+        projectDurationUnit,
+        revisionsAllowed,
+        warrantyPeriod,
+        autoCancelDays,
+        progressTolerance,
+        delayCompensation,
+        clientFaultRefund,
+        progressTimelineLink,
+        clientSignatureImage,
         theme,
       })
 
@@ -137,7 +172,7 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
               </div>
 
               <h1 className={styles.contractTitle}>عقد اتفاق لتقديم خدمات</h1>
-              <h2 className={styles.contractSubtitle}>تصميم وتطوير موقع إلكتروني</h2>
+              <h2 className={styles.contractSubtitle}>{displayProjectName}</h2>
 
               <div className={styles.ornament}>
                 <span className={styles.ornamentLine} />
@@ -156,7 +191,7 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
                 </div>
                 <div className={styles.metaItem}>
                   <span className={styles.metaLabel}>قيمة العقد</span>
-                  <span className={`${styles.metaValue} ${styles.gold}`}>$450</span>
+                  <span className={`${styles.metaValue} ${styles.gold}`}>${contractPrice}$</span>
                 </div>
               </div>
             </div>
@@ -211,7 +246,7 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
 
             <div className={styles.sectionTitle}>بنود وشروط العقد</div>
             <div className={styles.clausesList}>
-              {contractClausesData.map((clause, i) => (
+              {displayClauses.map((clause, i) => (
                 <div key={i} className={styles.clause}>
                   <div className={styles.clauseHeader}>
                     <span className={styles.clauseNum}>البند {i + 1}</span>
@@ -221,6 +256,58 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
                 </div>
               ))}
             </div>
+
+            {projectDetailsParam && projectDetailsParam.length > 0 && (
+              <>
+                <div className={styles.sectionTitle}>تفاصيل المشروع</div>
+                <div className={styles.clausesList}>
+                  {projectDetailsParam.map((detail, i) => (
+                    <div key={i} className={styles.clause}>
+                      <div className={styles.clauseHeader}>
+                        <span className={styles.clauseNum}>{i + 1}</span>
+                        <span className={styles.clauseTitleText}>{detail.title}</span>
+                      </div>
+                      <p className={styles.clauseText}>{detail.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Contract Extra Details */}
+            {(projectDuration || revisionsAllowed || warrantyPeriod || autoCancelDays || progressTolerance != null || delayCompensation != null || clientFaultRefund != null || progressTimelineLink) && (
+              <>
+                <div className={styles.sectionTitle}>تفاصيل إضافية للعقد</div>
+                <table className={styles.financeTable}>
+                  <thead>
+                    <tr>
+                      <th>البيان</th>
+                      <th className={styles.amountCol}>القيمة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projectDuration != null && (
+                      <tr>
+                        <td>⏱️ مدة التنفيذ</td>
+                        <td className={styles.amount}>{projectDuration} {projectDurationUnit === 'days' ? 'يوم' : projectDurationUnit === 'weeks' ? 'أسبوع' : projectDurationUnit === 'months' ? 'شهر' : projectDurationUnit || 'يوم'}</td>
+                      </tr>
+                    )}
+                    {revisionsAllowed != null && (
+                      <tr>
+                        <td>✏️ عدد التعديلات المسموحة</td>
+                        <td className={styles.amount}>{revisionsAllowed} تعديلات</td>
+                      </tr>
+                    )}
+                    {warrantyPeriod != null && (
+                      <tr>
+                        <td>🛡️ فترة الضمان</td>
+                        <td className={styles.amount}>{warrantyPeriod} أشهر</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </>
+            )}
 
             <div className={styles.sectionTitle}>الملخص المالي</div>
             <table className={styles.financeTable}>
@@ -232,20 +319,21 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
               </thead>
               <tbody>
                 <tr>
-                  <td>خدمة تصميم وتطوير الموقع الإلكتروني</td>
-                  <td className={styles.amount}>$450.00</td>
+                  <td>خدمة {displayProjectName}</td>
+                  <td className={styles.amount}>${contractPrice.toFixed(2)}</td>
                 </tr>
-                <tr>
-                  <td className={styles.subItem}>↩ الدفعة الأولى (عند التوقيع - 50%)</td>
-                  <td className={`${styles.amount} ${styles.subAmount}`}>$225.00</td>
-                </tr>
-                <tr>
-                  <td className={styles.subItem}>↩ الدفعة الثانية (عند التسليم - 50%)</td>
-                  <td className={`${styles.amount} ${styles.subAmount}`}>$225.00</td>
-                </tr>
+                {Array.from({ length: payNumber }, (_, i) => {
+                  const percent = Math.round(100 / payNumber)
+                  return (
+                    <tr key={i}>
+                      <td className={styles.subItem}>↩ الدفعة {i + 1} ({percent}%)</td>
+                      <td className={`${styles.amount} ${styles.subAmount}`}>${paymentPerInstallment.toFixed(2)}</td>
+                    </tr>
+                  )
+                })}
                 <tr className={styles.totalRow}>
                   <td>الإجمالي المستحق</td>
-                  <td className={`${styles.amount} ${styles.totalAmount}`}>$450.00</td>
+                  <td className={`${styles.amount} ${styles.totalAmount}`}>${contractPrice.toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
@@ -271,7 +359,11 @@ const PrintableContractView = forwardRef<HTMLDivElement, PrintableContractViewPr
               <div className={styles.sigBox}>
                 <div className={styles.sigLabel}>توقيع الطرف الثاني</div>
                 <div className={styles.sigArea}>
-                  <div className={styles.sigClientName}>{clientName}</div>
+                  {clientSignatureImage ? (
+                    <img src={clientSignatureImage || bufferToDataUrl(project?.signature_white || project?.signature_blue || project?.signature_black)} alt="Client Signature" style={{ maxWidth: '100%', maxHeight: '50px', objectFit: 'contain' }} />
+                  ) : (
+                    <div className={styles.sigClientName}>{clientName}</div>
+                  )}
                 </div>
                 <div className={styles.sigName}>{clientName || '—'}</div>
                 <div className={styles.sigDate}>التاريخ: {formattedDate}</div>

@@ -275,37 +275,10 @@ function ControllersContent() {
 
   // Projects data is now fetched from API (see useEffect below)
 
-  const transactions: Transaction[] = [
-    {
-      id: '1',
-      type: 'income',
-      amount: 45000,
-      description: 'دفعة مشروع التجارة الإلكترونية',
-      descriptionEn: 'E-commerce project payment',
-      date: '2026-02-15',
-      status: 'completed',
-      client: 'شركة الرياض التقنية'
-    },
-    {
-      id: '2',
-      type: 'expense',
-      amount: 8500,
-      description: 'رواتب الموظفين',
-      descriptionEn: 'Employee salaries',
-      date: '2026-02-14',
-      status: 'completed'
-    },
-    {
-      id: '3',
-      type: 'income',
-      amount: 25000,
-      description: 'دفعة مقدمة لمشروع جديد',
-      descriptionEn: 'Advance payment for new project',
-      date: '2026-02-16',
-      status: 'pending',
-      client: 'مؤسسة النور للتطوير'
-    },
-  ]
+  // Financial data (from Backend)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [transactionsLoading, setTransactionsLoading] = useState(false)
+  const [transactionsError, setTransactionsError] = useState<string | null>(null)
 
   const mockUsers: User[] = [
     {
@@ -369,6 +342,96 @@ function ControllersContent() {
 
   // ==================== API Configuration ====================
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
+
+  const mapSubscriptionStatusToTransactionStatus = (
+    status?: string
+  ): Transaction['status'] => {
+    const normalized = (status || '').toLowerCase()
+    if (normalized === 'active' || normalized === 'trialing') return 'completed'
+    if (normalized === 'incomplete' || normalized === 'past_due') return 'pending'
+    if (
+      normalized === 'canceled' ||
+      normalized === 'cancelled' ||
+      normalized === 'unpaid' ||
+      normalized === 'paused' ||
+      normalized === 'incomplete_expired'
+    ) {
+      return 'failed'
+    }
+    // Fallback: treat unknown statuses as pending
+    return 'pending'
+  }
+
+  const centsToDollars = (amount?: unknown) => {
+    const n = typeof amount === 'number' ? amount : Number(amount)
+    if (!Number.isFinite(n)) return 0
+    return n / 100
+  }
+
+  const fetchFinancialTransactions = useCallback(async () => {
+    if (!token) return
+    setTransactionsLoading(true)
+    setTransactionsError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/subscriptions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!res.ok) {
+        const message = isRTL
+          ? 'فشل في جلب بيانات المعاملات المالية'
+          : 'Failed to load financial transactions'
+        setTransactionsError(message)
+        setTransactions([])
+        return
+      }
+
+      const json = await res.json()
+      const subs: any[] = Array.isArray(json?.data) ? json.data : []
+
+      const mapped: Transaction[] = subs.map((s) => {
+        const id = String(
+          s.stripe_subscription_id ||
+            s.stripeSubscriptionId ||
+            s.id ||
+            `${Date.now()}-${Math.random().toString(16).slice(2)}`
+        )
+        const planName = String(s.plan_name || s.planName || 'Subscription')
+        const amount = centsToDollars(s.amount)
+        const currency = String(s.currency || 'USD').toUpperCase()
+        const start = s.current_period_start || s.currentPeriodStart || s.created_at || s.createdAt
+        const date = start ? new Date(start).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+        const status = mapSubscriptionStatusToTransactionStatus(s.status)
+
+        const descAr = `اشتراك: ${planName}`
+        const descEn = `Subscription: ${planName}`
+
+        return {
+          id,
+          type: 'income',
+          amount,
+          description: currency === 'USD' ? descAr : `${descAr} (${currency})`,
+          descriptionEn: currency === 'USD' ? descEn : `${descEn} (${currency})`,
+          date,
+          status,
+          client: s.user_email || s.userEmail || s.customer_email || s.customerEmail || undefined,
+        }
+      })
+
+      setTransactions(mapped)
+    } catch {
+      setTransactionsError(isRTL ? 'تعذر الاتصال بالخادم' : 'Could not connect to server')
+      setTransactions([])
+    } finally {
+      setTransactionsLoading(false)
+    }
+  }, [API_BASE_URL, isRTL, token])
+
+  useEffect(() => {
+    fetchFinancialTransactions()
+  }, [fetchFinancialTransactions])
 
   // ==================== Admin Management Functions ====================
 
@@ -4282,37 +4345,57 @@ function ControllersContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map(transaction => (
-                    <tr key={transaction.id}>
-                      <td>
-                        <span 
-                          className={styles.badge}
-                          style={{ 
-                            backgroundColor: transaction.type === 'income' ? '#00C781' : '#FF4444' 
-                          }}
-                        >
-                          {transaction.type === 'income' ? (isRTL ? 'دخل' : 'Income') : (isRTL ? 'مصروف' : 'Expense')}
-                        </span>
+                  {transactionsLoading ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '1.25rem', color: 'rgba(255,255,255,0.7)' }}>
+                        {isRTL ? 'جاري تحميل المعاملات...' : 'Loading transactions...'}
                       </td>
-                      <td>{isRTL ? transaction.description : transaction.descriptionEn}</td>
-                      <td style={{ 
-                        color: transaction.type === 'income' ? '#00C781' : '#FF4444',
-                        fontWeight: 'bold'
-                      }}>
-                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                      </td>
-                      <td>{formatDate(transaction.date)}</td>
-                      <td>
-                        <span 
-                          className={styles.badge}
-                          style={{ backgroundColor: getStatusColor(transaction.status) }}
-                        >
-                          {transaction.status}
-                        </span>
-                      </td>
-                      <td>{transaction.client || '-'}</td>
                     </tr>
-                  ))}
+                  ) : transactionsError ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '1.25rem', color: '#ff6b6b' }}>
+                        {transactionsError}
+                      </td>
+                    </tr>
+                  ) : transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '1.25rem', color: 'rgba(255,255,255,0.7)' }}>
+                        {isRTL ? 'لا توجد معاملات لعرضها' : 'No transactions to display'}
+                      </td>
+                    </tr>
+                  ) : (
+                    transactions.map(transaction => (
+                      <tr key={transaction.id}>
+                        <td>
+                          <span 
+                            className={styles.badge}
+                            style={{ 
+                              backgroundColor: transaction.type === 'income' ? '#00C781' : '#FF4444' 
+                            }}
+                          >
+                            {transaction.type === 'income' ? (isRTL ? 'دخل' : 'Income') : (isRTL ? 'مصروف' : 'Expense')}
+                          </span>
+                        </td>
+                        <td>{isRTL ? transaction.description : transaction.descriptionEn}</td>
+                        <td style={{ 
+                          color: transaction.type === 'income' ? '#00C781' : '#FF4444',
+                          fontWeight: 'bold'
+                        }}>
+                          {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                        </td>
+                        <td>{formatDate(transaction.date)}</td>
+                        <td>
+                          <span 
+                            className={styles.badge}
+                            style={{ backgroundColor: getStatusColor(transaction.status) }}
+                          >
+                            {transaction.status}
+                          </span>
+                        </td>
+                        <td>{transaction.client || '-'}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

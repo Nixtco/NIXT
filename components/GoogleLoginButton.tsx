@@ -50,22 +50,44 @@ export function GoogleLoginButton({ onSuccess, onError }: GoogleLoginButtonProps
                 <button
                     type="button"
                     disabled
-                    className="w-full py-3 px-4 bg-white text-gray-800 font-medium rounded-lg flex items-center justify-center gap-3 opacity-70 cursor-not-allowed"
+                    className="w-full font-medium flex items-center justify-center gap-3 opacity-70 cursor-not-allowed"
+                    style={{
+                        height: '48px',
+                        borderRadius: '99px',
+                        background: 'white',
+                        color: '#111827',
+                        border: '1px solid rgba(255, 255, 255, 0.8)'
+                    }}
                 >
                     <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-gray-800"></div>
                     Loading...
                 </button>
             ) : (
-                <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => onError?.('Google login failed')}
-                    useOneTap={false}
-                    theme="filled_blue"
-                    shape="rectangular"
-                    size="large"
-                    width="350"
-                    text="signin_with"
-                />
+                <div
+                    className="w-full"
+                    style={{
+                        // Make Google button feel like the site's pill buttons
+                        height: '48px',
+                        borderRadius: '99px',
+                        overflow: 'hidden',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    <GoogleLogin
+                        onSuccess={handleGoogleSuccess}
+                        onError={() => onError?.('Google login failed')}
+                        useOneTap={false}
+                        theme="outline"
+                        shape="pill"
+                        size="large"
+                        width="380"
+                        text="continue_with"
+                    />
+                </div>
             )}
         </div>
     );

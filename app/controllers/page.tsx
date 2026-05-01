@@ -373,7 +373,7 @@ function ControllersContent() {
     setTransactionsLoading(true)
     setTransactionsError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/subscriptions`, {
+      const res = await fetch(`${API_BASE_URL}/projects?limit=1000`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -389,35 +389,41 @@ function ControllersContent() {
       }
 
       const json = await res.json()
-      const subs: any[] = Array.isArray(json?.data) ? json.data : []
+      const projects: APIProject[] = Array.isArray(json?.data) ? json.data : []
 
-      const mapped: Transaction[] = subs.map((s) => {
-        const id = String(
-          s.stripe_subscription_id ||
-            s.stripeSubscriptionId ||
-            s.id ||
-            `${Date.now()}-${Math.random().toString(16).slice(2)}`
-        )
-        const planName = String(s.plan_name || s.planName || 'Subscription')
-        const amount = centsToDollars(s.amount)
-        const currency = String(s.currency || 'USD').toUpperCase()
-        const start = s.current_period_start || s.currentPeriodStart || s.created_at || s.createdAt
-        const date = start ? new Date(start).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
-        const status = mapSubscriptionStatusToTransactionStatus(s.status)
+      const mapped: Transaction[] = projects.flatMap((project) => {
+        const projectName = String(project.name || 'Project')
+        const revenueAmount = centsToDollars(project.price)
+        const spentAmount = centsToDollars(project.spent)
+        const pendingAmount = Math.max(0, revenueAmount - spentAmount)
+        const date = project.created_at || project.start_date || new Date().toISOString()
+        const isCompleted = project.status === 'completed' || pendingAmount === 0
 
-        const descAr = `اشتراك: ${planName}`
-        const descEn = `Subscription: ${planName}`
-
-        return {
-          id,
+        const revenueTransaction: Transaction = {
+          id: `${project.id}-revenue`,
           type: 'income',
-          amount,
-          description: currency === 'USD' ? descAr : `${descAr} (${currency})`,
-          descriptionEn: currency === 'USD' ? descEn : `${descEn} (${currency})`,
+          amount: isCompleted ? revenueAmount : pendingAmount,
+          description: `إيراد المشروع: ${projectName}`,
+          descriptionEn: `Project revenue: ${projectName}`,
           date,
-          status,
-          client: s.user_email || s.userEmail || s.customer_email || s.customerEmail || undefined,
+          status: isCompleted ? 'completed' : 'pending',
+          client: project.user_id,
         }
+
+        const expenseTransaction: Transaction | null = spentAmount > 0
+          ? {
+              id: `${project.id}-expense`,
+              type: 'expense',
+              amount: spentAmount,
+              description: `مصروف المشروع: ${projectName}`,
+              descriptionEn: `Project expense: ${projectName}`,
+              date,
+              status: 'completed',
+              client: project.user_id,
+            }
+          : null
+
+        return expenseTransaction ? [revenueTransaction, expenseTransaction] : [revenueTransaction]
       })
 
       setTransactions(mapped)

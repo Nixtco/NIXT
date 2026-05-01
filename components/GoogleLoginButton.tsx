@@ -56,7 +56,7 @@ export function GoogleLoginButton({ onSuccess, onError }: GoogleLoginButtonProps
                         borderRadius: '99px',
                         background: 'white',
                         color: '#111827',
-                        border: '1px solid rgba(255, 255, 255, 0.8)'
+                        border: 'none'
                     }}
                 >
                     <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-gray-800"></div>
@@ -70,8 +70,8 @@ export function GoogleLoginButton({ onSuccess, onError }: GoogleLoginButtonProps
                         height: '48px',
                         borderRadius: '99px',
                         overflow: 'hidden',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: 'none',
+                        background: 'transparent',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center'

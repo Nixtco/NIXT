@@ -1,8 +1,9 @@
 'use client'
 
-import { FC } from 'react'
+import { FC, useEffect, useState } from 'react'
 import styles from './Dashboard.module.css'
 import { useLanguage } from '@/hooks/useLanguage'
+import { apiCall } from '@/hooks/useApi'
 
 interface FinancialReport {
   sales: {
@@ -35,59 +36,115 @@ const FinancialDashboard: FC = () => {
   const { t, language } = useLanguage()
   const isRTL = language === 'ar'
 
-  // Mock data for demonstration
-  const financial: FinancialReport = {
-    sales: {
-      today: 12450,
-      thisMonth: 387600,
-      lastMonth: 342100,
-      change: 13.3
-    },
-    revenue: {
-      total: 2847300,
-      thisMonth: 387600,
-      pending: 45200
-    },
-    invoices: {
-      paid: 124,
-      pending: 8,
-      overdue: 2
-    },
-    recentTransactions: [
-      {
-        id: '1',
-        description: 'دفعة من عميل شركة الرياض التقنية',
-        descriptionEn: 'Payment from Riyadh Tech Client',
-        amount: 25000,
-        date: '2026-02-15T10:30:00Z',
-        status: 'paid'
-      },
-      {
-        id: '2', 
-        description: 'مشروع تطوير موقع إلكتروني',
-        descriptionEn: 'Website Development Project',
-        amount: 8500,
-        date: '2026-02-14T14:22:00Z', 
-        status: 'pending'
-      },
-      {
-        id: '3',
-        description: 'خدمات الاستضافة الشهرية',
-        descriptionEn: 'Monthly Hosting Services',
-        amount: 1200,
-        date: '2026-02-13T09:15:00Z',
-        status: 'paid'
-      },
-      {
-        id: '4',
-        description: 'تطوير تطبيق جوال',
-        descriptionEn: 'Mobile App Development',
-        amount: 15000,
-        date: '2026-02-12T16:45:00Z',
-        status: 'failed'
+  const [financial, setFinancial] = useState<FinancialReport | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const res = await apiCall<{ success: boolean; data: any[] }>('/api/v1/projects?limit=1000')
+        const projects = (res && res.data) || []
+
+        // Helper to parse decimal string/number
+        const toNum = (v: any) => {
+          if (v === null || v === undefined) return 0
+          if (typeof v === 'number') return v
+          const n = parseFloat(String(v))
+          return Number.isNaN(n) ? 0 : n
+        }
+
+        const now = new Date()
+        const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+
+        let salesToday = 0
+        let salesThisMonth = 0
+        let salesLastMonth = 0
+
+        let revenueTotal = 0
+        let revenueThisMonth = 0
+        let revenuePending = 0
+
+        let invoicesPaid = 0
+        let invoicesPending = 0
+        let invoicesOverdue = 0
+
+        const recentTransactions: FinancialReport['recentTransactions'] = []
+
+        projects.forEach(p => {
+          const price = toNum(p.price)
+          const spent = toNum(p.spent)
+          const created = p.created_at ? new Date(p.created_at) : (p.start_date ? new Date(p.start_date) : null)
+
+          revenueTotal += price
+          const remaining = Math.max(0, price - spent)
+          revenuePending += remaining
+
+          if (spent >= price) invoicesPaid += 1
+          else invoicesPending += 1
+
+          if (p.status === 'onhold' || p.status === 'cancelled') invoicesOverdue += 1
+
+          if (created) {
+            if (created >= thisMonthStart) {
+              salesThisMonth += price
+              revenueThisMonth += price
+            }
+            if (created >= lastMonthStart && created < thisMonthStart) {
+              salesLastMonth += price
+            }
+            const today = new Date()
+            if (created.toDateString() === today.toDateString()) {
+              salesToday += price
+            }
+          }
+
+          recentTransactions.push({
+            id: p.id,
+            description: p.name || p.title || 'Project',
+            descriptionEn: p.name || p.title || 'Project',
+            amount: spent || price,
+            date: (p.created_at || p.start_date) || new Date().toISOString(),
+            status: spent >= price ? 'paid' : 'pending'
+          })
+        })
+
+        const change = salesLastMonth === 0 ? 0 : ((salesThisMonth - salesLastMonth) / Math.max(1, salesLastMonth)) * 100
+
+        setFinancial({
+          sales: {
+            today: Math.round(salesToday),
+            thisMonth: Math.round(salesThisMonth),
+            lastMonth: Math.round(salesLastMonth),
+            change: Math.round(change * 10) / 10
+          },
+          revenue: {
+            total: Math.round(revenueTotal),
+            thisMonth: Math.round(revenueThisMonth),
+            pending: Math.round(revenuePending)
+          },
+          invoices: {
+            paid: invoicesPaid,
+            pending: invoicesPending,
+            overdue: invoicesOverdue
+          },
+          recentTransactions: recentTransactions.slice(0, 10)
+        })
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+        console.error(err)
+      } finally {
+        setLoading(false)
       }
-    ]
-  }
+    }
+
+    load()
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -107,6 +164,11 @@ const FinancialDashboard: FC = () => {
     }
   }
 
+  if (loading) return <div className={styles.section}>{t.loading || 'جارٍ التحميل...'}</div>
+  if (error) return <div className={styles.section}>Error: {error}</div>
+  if (!financial) return <div className={styles.section}>{t.financial.noData || 'لا توجد بيانات'}</div>
+  const f = financial
+
   return (
     <div className={styles.section}>
       <h2 className={styles.sectionTitle} style={{ textAlign: isRTL ? 'right' : 'start' }}>{t.financial.title}</h2>
@@ -118,19 +180,19 @@ const FinancialDashboard: FC = () => {
           <div className={styles.statNumbers}>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.today}</span>
-              <span>${financial.sales.today.toLocaleString()}</span>
+              <span>${f.sales.today.toLocaleString()}</span>
             </div>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.thisMonth}</span>
-              <span>${financial.sales.thisMonth.toLocaleString()}</span>
+              <span>${f.sales.thisMonth.toLocaleString()}</span>
             </div>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.lastMonth}</span>
-              <span>${financial.sales.lastMonth.toLocaleString()}</span>
+              <span>${f.sales.lastMonth.toLocaleString()}</span>
             </div>
           </div>
-          <div className={`${styles.changeIndicator} ${financial.sales.change >= 0 ? styles.positive : styles.negative}`}>
-            {financial.sales.change >= 0 ? '↗' : '↘'} {Math.abs(financial.sales.change)}%
+          <div className={`${styles.changeIndicator} ${f.sales.change >= 0 ? styles.positive : styles.negative}`}>
+            {f.sales.change >= 0 ? '↗' : '↘'} {Math.abs(f.sales.change)}%
           </div>
         </div>
 
@@ -138,16 +200,16 @@ const FinancialDashboard: FC = () => {
         <div className={styles.statCard}>
           <h4 style={{ textAlign: isRTL ? 'right' : 'start' }}>{t.financial.revenue}</h4>
           <div className={styles.bigStat}>
-            ${financial.revenue.total.toLocaleString()}
+            ${f.revenue.total.toLocaleString()}
           </div>
           <div className={styles.statNumbers}>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.thisMonth}</span>
-              <span>${financial.revenue.thisMonth.toLocaleString()}</span>
+              <span>${f.revenue.thisMonth.toLocaleString()}</span>
             </div>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.pending}</span>
-              <span>${financial.revenue.pending.toLocaleString()}</span>
+              <span>${f.revenue.pending.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -158,15 +220,15 @@ const FinancialDashboard: FC = () => {
           <div className={styles.statNumbers}>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.paid}</span>
-              <span>{financial.invoices.paid}</span>
+              <span>{f.invoices.paid}</span>
             </div>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.pending}</span>
-              <span>{financial.invoices.pending}</span>
+              <span>{f.invoices.pending}</span>
             </div>
             <div className={styles.statItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <span>{t.financial.overdue}</span>
-              <span>{financial.invoices.overdue}</span>
+              <span>{f.invoices.overdue}</span>
             </div>
           </div>
         </div>
@@ -176,7 +238,7 @@ const FinancialDashboard: FC = () => {
       <div className={styles.transactionsSection}>
         <h3 style={{ textAlign: isRTL ? 'right' : 'start' }}>{t.financial.recentTransactions}</h3>
         <div className={styles.transactionsList}>
-          {financial.recentTransactions.map((transaction) => (
+          {f.recentTransactions.map((transaction) => (
             <div key={transaction.id} className={styles.transactionItem} style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
               <div className={styles.transactionInfo} style={{ textAlign: isRTL ? 'right' : 'left' }}>
                 <span className={styles.transactionDesc}>

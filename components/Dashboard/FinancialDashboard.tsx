@@ -164,9 +164,9 @@ const FinancialDashboard: FC = () => {
     }
   }
 
-  if (loading) return <div className={styles.section}>{t.loading || 'جارٍ التحميل...'}</div>
+  if (loading) return <div className={styles.section}>جارٍ التحميل...</div>
   if (error) return <div className={styles.section}>Error: {error}</div>
-  if (!financial) return <div className={styles.section}>{t.financial.noData || 'لا توجد بيانات'}</div>
+  if (!financial) return <div className={styles.section}>لا توجد بيانات</div>
   const f = financial
 
   return (

@@ -82,7 +82,7 @@ export default function PricingPage() {
               <li><CheckIcon /> Fast Loading Speed</li>
               <li><CheckIcon /> Contact Form Integration</li>
             </ul>
-            <button className={styles.placeholderBtn} onClick={() => window.location.href='/#contact'}>
+            <button className={styles.placeholderBtn} onClick={() => window.location.href='/login'}>
               Get Started
             </button>
           </div>
@@ -104,7 +104,7 @@ export default function PricingPage() {
               <li><CheckIcon /> Dark/Light Mode Support</li>
               <li><CheckIcon /> API Integration</li>
             </ul>
-            <button className={styles.placeholderBtn} onClick={() => window.location.href='/#contact'}>
+            <button className={styles.placeholderBtn} onClick={() => window.location.href='/login'}>
               Get Started
             </button>
           </div>
@@ -125,7 +125,7 @@ export default function PricingPage() {
               <li><CheckIcon /> Customer Database</li>
               <li><CheckIcon /> Multi-currency Support</li>
             </ul>
-            <button className={styles.placeholderBtn} onClick={() => window.location.href='/#contact'}>
+            <button className={styles.placeholderBtn} onClick={() => window.location.href='/login'}>
               Get Started
             </button>
           </div>
@@ -139,7 +139,7 @@ export default function PricingPage() {
               If your request doesn&apos;t fit these categories or you have specific budget constraints, we&apos;re here to help. Let&apos;s discuss a custom solution.
             </p>
           </div>
-          <Link href="/#contact" className={styles.makeOfferBtn}>
+          <Link href="/login" className={styles.makeOfferBtn}>
              Make an Offer
           </Link>
         </div>

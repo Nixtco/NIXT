@@ -73,10 +73,20 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center px-4" style={{
+        <div className="min-h-screen flex items-center justify-center px-4 relative" style={{
             background: '#000',
             backgroundImage: 'radial-gradient(circle at bottom center, #001a4d 0%, transparent 85%)'
         }}>
+            {/* Back Button in Top Left */}
+            <Link href="/" className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 rounded-lg transition-all hover:bg-white/10 group" style={{
+                color: 'rgba(255, 255, 255, 0.6)',
+            }} title="Return to Homepage - العودة للصفحة الرئيسية">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="group-hover:translate-x-1 transition-transform">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                <span className="text-sm whitespace-nowrap">Back Home</span>
+            </Link>
+
             <div className="max-w-md w-full">
                 {/* Logo/Header */}
                 <div className="text-center mb-12">
@@ -223,14 +233,25 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                {/* Back to Home */}
+                {/* Back to Home Button */}
                 <div className="mt-8 text-center">
-                    <Link href="/" className="text-xs uppercase tracking-widest transition-opacity hover:opacity-60" style={{
-                        color: 'rgba(255, 255, 255, 0.6)',
-                        letterSpacing: '2px'
-                    }}>
-                        ← Back to Home
+                    <Link href="/" className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-all hover:bg-white/10 group" style={{
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        fontSize: '0.875rem',
+                    }} title="العودة للصفحة الرئيسية | Return to Homepage">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="group-hover:-translate-x-1 transition-transform">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        <span>Return to Homepage</span>
+                        <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>←</span>
                     </Link>
+                    <p style={{
+                        color: 'rgba(255, 255, 255, 0.4)',
+                        fontSize: '0.75rem',
+                        marginTop: '0.5rem',
+                        letterSpacing: '0.5px'
+                    }}>العودة للصفحة الرئيسية</p>
                 </div>
             </div>
 

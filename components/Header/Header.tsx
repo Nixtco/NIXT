@@ -71,7 +71,7 @@ const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
           </a>
         </li>
         <li>
-          <a href="#contact" onClick={(e) => handleNavClick(e, 'contact')}>
+          <a href="/login">
             Contact
           </a>
         </li>

@@ -308,7 +308,12 @@ export const translations = {
         support: 'الدعم',
         allSections: 'جميع الأقسام',
       },
-    }
+    },
+    legal: {
+      privacyPolicy: 'سياسة الخصوصية',
+      termsOfService: 'شروط الخدمة',
+      cookiePolicy: 'سياسة ملفات تعريف الارتباط',
+    },
   },
   en: {
     dashboard: {
@@ -619,6 +624,11 @@ export const translations = {
         support: 'Support',
         allSections: 'All Sections',
       },
+    },
+    legal: {
+      privacyPolicy: 'Privacy Policy',
+      termsOfService: 'Terms of Service',
+      cookiePolicy: 'Cookie Policy',
     },
   },
 }

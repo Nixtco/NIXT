@@ -32,13 +32,18 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "Nixt Group | Digital Future",
   description: "Digital Innovation & Tech Group - Building the future with integrated software solutions & smart systems development",
+  icons: {
+    icon: "/icon.ico",
+    shortcut: "/icon.ico",
+    apple: "/icon.ico",
+  },
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>) { 
   return (
     <html lang="en">
       <head>

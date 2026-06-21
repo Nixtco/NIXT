@@ -10,6 +10,7 @@
   --accent-blue: #0055ff;
   --accent-cyan: #27d9f5;
   --text-white: #ffffff;
+  --text-color: rgba(255, 255, 255, 0.8);
   --text-dim: rgba(255, 255, 255, 0.6);
   --border-color: rgba(255, 255, 255, 0.1);
   --bg-card: rgba(255, 255, 255, 0.03);

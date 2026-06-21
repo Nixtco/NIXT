@@ -206,14 +206,6 @@ function DashboardContent() {
         })}
       </div>
 
-      {/* Demo Mode Indicator */}
-      <div className={styles.apiStatus} style={language === 'ar' ? { left: '20px', right: 'auto' } : { right: '20px', left: 'auto' }}>
-        <div className={styles.statusIndicator}>
-          <span className={styles.statusDot}></span>
-          {t.dashboard.demoMode}
-        </div>
-      </div>
-
       <ThemeSwitcher 
         onThemeChange={nextTheme} 
         onSetTheme={setTheme} 

@@ -6,6 +6,7 @@ interface ThemeConfig {
   background: string
   textMain: string
   textDim: string
+  textColor: string
   borderColor: string
   bgCard: string
   bgSurface: string
@@ -18,6 +19,7 @@ const themeConfigs: ThemeConfig[] = [
     background: 'radial-gradient(circle at bottom center, #001a4d 0%, #000000 85%)',
     textMain: '#ffffff',
     textDim: 'rgba(255, 255, 255, 0.6)',
+    textColor: 'rgba(255, 255, 255, 0.8)',
     borderColor: 'rgba(255, 255, 255, 0.1)',
     bgCard: 'rgba(255, 255, 255, 0.03)',
     bgSurface: 'rgba(255, 255, 255, 0.05)',
@@ -28,6 +30,7 @@ const themeConfigs: ThemeConfig[] = [
     background: 'radial-gradient(circle at bottom center, #2d004d 0%, #000000 85%)',
     textMain: '#ffffff',
     textDim: 'rgba(255, 255, 255, 0.6)',
+    textColor: 'rgba(255, 255, 255, 0.8)',
     borderColor: 'rgba(255, 255, 255, 0.1)',
     bgCard: 'rgba(255, 255, 255, 0.03)',
     bgSurface: 'rgba(255, 255, 255, 0.05)',
@@ -38,6 +41,7 @@ const themeConfigs: ThemeConfig[] = [
     background: 'radial-gradient(circle at bottom center, #004d33 0%, #000000 85%)',
     textMain: '#ffffff',
     textDim: 'rgba(255, 255, 255, 0.6)',
+    textColor: 'rgba(255, 255, 255, 0.1)',
     borderColor: 'rgba(255, 255, 255, 0.1)',
     bgCard: 'rgba(255, 255, 255, 0.03)',
     bgSurface: 'rgba(255, 255, 255, 0.05)',
@@ -48,6 +52,7 @@ const themeConfigs: ThemeConfig[] = [
     background: 'linear-gradient(to bottom, #1a1a1a, #000000)',
     textMain: '#ffffff',
     textDim: 'rgba(255, 255, 255, 0.6)',
+    textColor: 'rgba(255, 255, 255, 0.8)',
     borderColor: 'rgba(255, 255, 255, 0.1)',
     bgCard: 'rgba(255, 255, 255, 0.03)',
     bgSurface: 'rgba(255, 255, 255, 0.05)',
@@ -58,6 +63,7 @@ const themeConfigs: ThemeConfig[] = [
     background: 'radial-gradient(circle at bottom center, #e6f0ff 0%, #ffffff 70%)',
     textMain: '#000000',
     textDim: 'rgba(0, 0, 0, 0.6)',
+    textColor: 'rgba(0, 0, 0, 0.8)',
     borderColor: 'rgba(0, 0, 0, 0.1)',
     bgCard: 'rgba(0, 85, 255, 0.03)',
     bgSurface: 'rgba(0, 85, 255, 0.05)',
@@ -79,6 +85,7 @@ export const useTheme = () => {
     
     document.documentElement.style.setProperty('--text-white', theme.textMain)
     document.documentElement.style.setProperty('--text-dim', theme.textDim)
+    document.documentElement.style.setProperty('--text-color', theme.textColor || theme.textMain)
     document.documentElement.style.setProperty('--border-color', theme.borderColor)
     document.documentElement.style.setProperty('--bg-card', theme.bgCard)
     document.documentElement.style.setProperty('--bg-surface', theme.bgSurface)

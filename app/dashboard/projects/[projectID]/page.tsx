@@ -9,6 +9,7 @@ import FinancialDashboard from '@/components/Dashboard/FinancialDashboard'
 import SupportCenter from '@/components/Dashboard/SupportCenter'
 import ContractDashboard from '@/components/Dashboard/ContractDashboard'
 import DashboardSettings from '@/components/Dashboard/DashboardSettings'
+import ChatWidget from '@/components/UI/ChatWidget'
 import styles from '@/components/Dashboard/Dashboard.module.css'
 import headerStyles from '../../../../components/Header/Header.module.css'
 import ThemeSwitcher from '@/components/UI/ThemeSwitcher'
@@ -182,13 +183,7 @@ function DashboardContent() {
         })}
       </div>
 
-      {/* Demo Mode Indicator */}
-      <div className={styles.apiStatus} style={language === 'ar' ? { left: '20px', right: 'auto' } : { right: '20px', left: 'auto' }}>
-        <div className={styles.statusIndicator}>
-          <span className={styles.statusDot}></span>
-          {t.dashboard.demoMode}
-        </div>
-      </div>
+      <ChatWidget />
 
       <ThemeSwitcher 
         onThemeChange={nextTheme} 

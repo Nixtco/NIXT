@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import styles from './Pricing.module.css';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -22,7 +23,12 @@ const CheckIcon = () => (
 );
 
 export default function PricingPage() {
+  const router = useRouter();
   const cardsRef = useRef<HTMLDivElement>(null);
+
+  const goToCheckout = (plan: string, amount: number) => {
+    router.push(`/payment?plan=${plan}&amount=${amount}`);
+  };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -82,8 +88,8 @@ export default function PricingPage() {
               <li><CheckIcon /> Fast Loading Speed</li>
               <li><CheckIcon /> Contact Form Integration</li>
             </ul>
-            <button className={styles.placeholderBtn} onClick={() => window.location.href='/login'}>
-              Get Started
+            <button className={styles.placeholderBtn} onClick={() => goToCheckout('landing', 100)}>
+              Pay Now
             </button>
           </div>
 
@@ -104,8 +110,8 @@ export default function PricingPage() {
               <li><CheckIcon /> Dark/Light Mode Support</li>
               <li><CheckIcon /> API Integration</li>
             </ul>
-            <button className={styles.placeholderBtn} onClick={() => window.location.href='/login'}>
-              Get Started
+            <button className={styles.placeholderBtn} onClick={() => goToCheckout('dashboard', 200)}>
+              Pay Now
             </button>
           </div>
 
@@ -125,8 +131,8 @@ export default function PricingPage() {
               <li><CheckIcon /> Customer Database</li>
               <li><CheckIcon /> Multi-currency Support</li>
             </ul>
-            <button className={styles.placeholderBtn} onClick={() => window.location.href='/login'}>
-              Get Started
+            <button className={styles.placeholderBtn} onClick={() => goToCheckout('ecommerce', 500)}>
+              Pay Now
             </button>
           </div>
         </div>
@@ -139,7 +145,7 @@ export default function PricingPage() {
               If your request doesn&apos;t fit these categories or you have specific budget constraints, we&apos;re here to help. Let&apos;s discuss a custom solution.
             </p>
           </div>
-          <Link href="/login" className={styles.makeOfferBtn}>
+          <Link href="/payment?plan=custom&amount=250" className={styles.makeOfferBtn}>
              Make an Offer
           </Link>
         </div>

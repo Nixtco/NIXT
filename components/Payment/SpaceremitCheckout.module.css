@@ -1,0 +1,195 @@
+.checkoutWrapper {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.summaryCard {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+}
+
+.summaryLabel {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.summaryTitle {
+  color: #fff;
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+}
+
+.summaryAmount {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.summaryAmount small {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.testBadge {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.paymentForm {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.paymentOption {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.paymentOption label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  cursor: pointer;
+}
+
+.paymentOption label span {
+  color: #fff;
+  font-weight: 600;
+}
+
+.paymentOption label small {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.methodContainer {
+  margin-top: 1rem;
+  min-height: 48px;
+}
+
+.payButton {
+  margin-top: 0.5rem;
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.payButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.payButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loadingBox,
+.errorBox,
+.inlineError,
+.statusMessage {
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+}
+
+.loadingBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.errorBox,
+.inlineError {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+}
+
+.statusMessage {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #bfdbfe;
+}
+
+.processingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  z-index: 50;
+  color: #fff;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.callbackUrl,
+.callbackHint code {
+  display: block;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #dbeafe;
+  word-break: break-all;
+  font-size: 0.8rem;
+}
+
+.footerNote {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.875rem;
+}
+
+.callbackHint {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

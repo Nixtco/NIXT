@@ -270,7 +270,7 @@ export default function SpaceremitCheckout({
           <span>${amount.toFixed(2)}</span>
           <small>{currency}</small>
         </div>
-        {config?.isTestMode && <span className={styles.testBadge}>Test Mode</span>}
+        {config?.isTestMode && <span className={styles.testBadge}>Secure Payment</span>}
       </div>
 
       {!buyerEmail && (

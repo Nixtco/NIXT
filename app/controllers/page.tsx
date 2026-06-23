@@ -739,8 +739,13 @@ function ControllersContent() {
   // Compute overall progress for a project
   const computeOverallProgress = (project: APIProject) => {
     if (!project.progress || project.progress.length === 0) return 0
-    const total = project.progress.reduce((sum, p) => sum + p.percent, 0)
-    return Math.round(total / project.progress.length)
+    const total = project.progress.filter(item =>
+      project.progress_completed.includes(item.id)
+    );
+    console.log(`Project ${project.id} progress: ${total.length}/${project.progress.length}`)
+    return total && total.length > 0 ? total.reduce((max, item) =>
+      item.percent > max ? item.percent : max
+  , 0) : 0;
   }
 
   // Open edit modal for a project - Now opens full details view with editable fields
@@ -1673,6 +1678,8 @@ function ControllersContent() {
     if (projectPriorityFilter !== 'all') {
       result = result.filter(p => p.priority === projectPriorityFilter)
     }
+
+    console.log('@#$$#@@#$$#@@#$$#$@ filteredProjects:', { projectSearchTerm, projectStatusFilter, projectPriorityFilter, result })
     
     return result
   }, [projects, projectSearchTerm, projectStatusFilter, projectPriorityFilter])

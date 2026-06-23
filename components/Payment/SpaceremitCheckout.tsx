@@ -325,10 +325,10 @@ export default function SpaceremitCheckout({
             id="sp_card_radio"
           />
           <label htmlFor="sp_card_radio">
-            <span>Card payment</span>
+            <span>Card payment (Coming soon)</span>
             <small>Visa, Mastercard, and more</small>
           </label>
-          <div id="spaceremit-card-pay" className={styles.methodContainer} />
+          {/* <div id="spaceremit-card-pay" className={styles.methodContainer} /> */}
         </div>
 
         <button type="submit" className={styles.payButton} disabled={isProcessing || !gatewayReady}>
@@ -338,11 +338,11 @@ export default function SpaceremitCheckout({
 
       <div className={styles.footerNote}>
         <p>Secure payment powered by Spaceremit</p>
-        {config?.callbackUrl && (
+        {/* {config?.callbackUrl && (
           <p className={styles.callbackHint}>
             Callback URL for dashboard setup: <code>{config.callbackUrl}</code>
           </p>
-        )}
+        )} */}
       </div>
     </div>
   );

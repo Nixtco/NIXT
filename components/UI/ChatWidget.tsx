@@ -6,6 +6,19 @@ import styles from './ChatWidget.module.css'
 import { useLanguage } from '@/hooks/useLanguage'
 import { getMyProjects, getAllProjects, type Project } from '@/app/Projects/apiFunctions'
 import { getAllUsers, type User as APIUser } from '@/app/users/apiFunctions'
+import {
+  createMessage,
+  getConversationMessages,
+  getAdminConversations,
+  getClientConversations,
+  markConversationAsRead,
+  getOrCreateConversation,
+  updateMessageStatus,
+  getAdminMessageStats,
+  type Conversation,
+  type Message as APIMessage,
+  type AdminStats
+} from '@/app/messages/apiFunctions'
 
 export interface ChatWidgetProps {
   mode?: 'user' | 'admin'
@@ -167,20 +180,27 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   const [projects, setProjects] = useState<Project[]>([])
   const [adminClients, setAdminClients] = useState<APIUser[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
-  const [activeChatId, setActiveChatId] = useState(GENERAL_CHAT_ID)
+  const [conversationsLoading, setConversationsLoading] = useState(false)
+
+  // API-based state
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+
+  // UI state
   const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>(
-    mode === 'admin'
-      ? {}
-      : { [GENERAL_CHAT_ID]: [getWelcomeMessage(language)] }
+    mode === 'admin' ? {} : { [GENERAL_CHAT_ID]: [getWelcomeMessage(language)] }
   )
+  const [activeChatId, setActiveChatId] = useState(GENERAL_CHAT_ID)
   const [typingChats, setTypingChats] = useState<Record<string, boolean>>({})
   const [inputValue, setInputValue] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const [chatFilter, setChatFilter] = useState<'all' | 'unread'>('all')
   const [chatSearch, setChatSearch] = useState('')
-  const [adminSeeded, setAdminSeeded] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const generalChatName = language === 'ar' ? 'استفسار عام' : 'General Inquiry'
   const generalChatSubtitle = language === 'ar' ? 'اسأل عن أي شيء' : 'Ask about anything'
@@ -268,7 +288,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   }, [chats, chatMessages])
 
   const activeChat = chats.find((c) => c.id === activeChatId) ?? chats[0]
-  const messages = chatMessages[activeChatId] ?? []
+  const activeMessages = chatMessages[activeChatId] ?? []
   const isTyping = typingChats[activeChatId] ?? false
 
   useEffect(() => {
@@ -306,13 +326,72 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   }, [isAdminMode])
 
   useEffect(() => {
-    if (!isAdminMode || adminSeeded || chats.length === 0) return
-    const { messages, unread } = createAdminSeedMessages(chats, language)
-    setChatMessages((prev) => ({ ...prev, ...messages }))
-    setUnreadCounts(unread)
-    setAdminSeeded(true)
-    if (chats[0]) setActiveChatId(chats[0].id)
-  }, [isAdminMode, adminSeeded, chats, language])
+    async function loadConversations() {
+      try {
+        setConversationsLoading(true)
+        if (isAdminMode) {
+          const res = await getAdminConversations({ limit: 100, offset: 0 })
+          if (res.success && res.data) {
+            setConversations(res.data)
+            // تحديث الـ unread counts
+            const unreadMap: Record<string, number> = {}
+            res.data.forEach(conv => {
+              unreadMap[conv.id] = conv.unread_count
+            })
+            setUnreadCounts(unreadMap)
+          }
+        } else {
+          const res = await getClientConversations({ limit: 100, offset: 0 })
+          if (res.success && res.data) {
+            setConversations(res.data)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load conversations:', err)
+      } finally {
+        setConversationsLoading(false)
+      }
+    }
+
+    if (isAdminMode || !isAdminMode) {
+      loadConversations()
+    }
+  }, [isAdminMode])
+
+  // تحميل الرسائل عند تغيير المحادثة النشطة
+  useEffect(() => {
+    async function loadMessages() {
+      if (!activeConversationId) return
+
+      try {
+        setMessagesLoading(true)
+        const res = await getConversationMessages(activeConversationId, { limit: 50, offset: 0 })
+        if (res.success && res.data) {
+          // تحويل رسائل API إلى صيغة الـ UI
+          const convertedMessages: Message[] = res.data.map(msg => ({
+            id: msg.id.charCodeAt(0), // استخدم الأحرف الأولى من ID كـ number مؤقتاً
+            text: msg.text,
+            sender: msg.sender_type === 'admin' ? 'sent' : 'received',
+            time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            senderName: msg.sender?.display_name || msg.sender?.email,
+            attachment: msg.attachment || undefined
+          }))
+          setChatMessages(prev => ({ ...prev, [activeConversationId]: convertedMessages }))
+          
+          // تحديد الرسائل كمقروءة للمدير
+          if (isAdminMode) {
+            await markConversationAsRead(activeConversationId)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load messages:', err)
+      } finally {
+        setMessagesLoading(false)
+      }
+    }
+
+    loadMessages()
+  }, [activeConversationId, isAdminMode])
 
   useEffect(() => {
     if (isAdminMode) return
@@ -334,7 +413,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, isTyping, activeChatId, scrollToBottom])
+  }, [activeMessages, isTyping, activeChatId, scrollToBottom])
 
   useEffect(() => {
     if (!showEmojiPicker) return
@@ -403,7 +482,11 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
 
   const sendMessage = useCallback((text: string, attachment?: MessageAttachment) => {
     if (!text.trim() && !attachment) return
+    if (!activeConversationId) return
 
+    setIsSubmitting(true)
+    
+    // أضف الرسالة محلياً أولاً
     const chatId = activeChatId
     const newMessage: Message = {
       id: Date.now(),
@@ -423,17 +506,74 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     setInputValue('')
     setFileError(null)
 
-    if (isAdminMode) {
-      setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
-    } else {
-      pushAutoReply(chatId, !!attachment)
-    }
-  }, [activeChatId, language, pushAutoReply, isAdminMode])
+    // إرسال الرسالة إلى API
+    createMessage({
+      conversation_id: activeConversationId,
+      text: text.trim(),
+      attachment: attachment || undefined
+    }).then(() => {
+      if (isAdminMode) {
+        setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
+      } else {
+        pushAutoReply(chatId, !!attachment)
+      }
+    }).catch((err) => {
+      console.error('Failed to send message:', err)
+      // يمكن إضافة رسالة خطأ للمستخدم هنا
+    }).finally(() => {
+      setIsSubmitting(false)
+    })
+  }, [activeChatId, language, pushAutoReply, isAdminMode, activeConversationId])
 
-  const handleSelectChat = (chatId: string) => {
+  const handleSelectChat = async (chatId: string) => {
     setActiveChatId(chatId)
     if (isAdminMode) {
       setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
+    }
+
+    // Determine or create the backend conversation id for this chat
+    try {
+      const chatItem = chats.find(c => c.id === chatId)
+      if (!chatItem) {
+        setActiveConversationId(null)
+        return
+      }
+
+      // Try to find an existing conversation from loaded conversations
+      const existing = conversations.find(conv => {
+        if (!conv) return false
+        // match by client + type + optional project
+        if (conv.client_id !== chatItem.clientId) return false
+        if (conv.type !== chatItem.type) return false
+        if ((conv.project_id || null) !== (chatItem.projectId || null)) return false
+        return true
+      })
+
+      if (existing) {
+        setActiveConversationId(existing.id)
+        return
+      }
+
+      // If not found, request creation (backend will return or create)
+      if (chatItem.clientId) {
+        const convRes = await getOrCreateConversation({
+          other_user_id: chatItem.clientId,
+          type: chatItem.type,
+          project_id: chatItem.projectId
+        })
+        if (convRes && convRes.success && convRes.data) {
+          setActiveConversationId(convRes.data.id)
+          // add to conversations list locally
+          setConversations(prev => (convRes.data ? [...prev.filter(c=>c.id!==convRes.data!.id), convRes.data!] : prev))
+          return
+        }
+      }
+
+      // Fallback: clear active conversation id
+      setActiveConversationId(null)
+    } catch (err) {
+      console.error('Failed to select chat / get conversation:', err)
+      setActiveConversationId(null)
     }
   }
 
@@ -544,7 +684,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     return (chat.clientName || chat.name).charAt(0).toUpperCase()
   }
 
-  const lastMessageFromClient = messages.length > 0 && messages[messages.length - 1].sender === 'received'
+  const lastMessageFromClient = activeMessages.length > 0 && activeMessages[activeMessages.length - 1].sender === 'received'
 
   return (
     <div className={`${styles.chatContainer} ${isAdminMode ? styles.chatContainerAdmin : ''}`} dir={dir}>
@@ -604,7 +744,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
         </div>
 
         <div className={styles.chatMessages}>
-          {messages.length === 0 && (
+          {activeMessages.length === 0 && (
             <div className={styles.emptyChat}>
               <span className={styles.emptyChatIcon}>💬</span>
               <p>{language === 'ar' ? 'لا توجد رسائل بعد' : 'No messages yet'}</p>
@@ -613,7 +753,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               </p>
             </div>
           )}
-          {messages.map((msg) => (
+          {activeMessages.map((msg) => (
             <div key={msg.id} className={`${styles.messageWrapper} ${styles[msg.sender]}`}>
               <div className={styles.messageAvatar}>
                 {msg.senderName ? msg.senderName.charAt(0).toUpperCase() : (msg.sender === 'sent' ? 'U' : 'S')}

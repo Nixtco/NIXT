@@ -8,6 +8,15 @@ interface ApiResponse<T> {
   error: string | null
 }
 
+function buildApiUrl(endpoint: string, baseUrl?: string): string {
+  const normalizedBaseUrl = (baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1').replace(/\/$/, '')
+  const normalizedEndpoint = endpoint.startsWith('/api/v1')
+    ? endpoint.replace(/^\/api\/v1/, '') || '/'
+    : endpoint
+
+  return `${normalizedBaseUrl}${normalizedEndpoint.startsWith('/') ? normalizedEndpoint : `/${normalizedEndpoint}`}`
+}
+
 export function useApi<T>(endpoint: string, options?: RequestInit): ApiResponse<T> {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
@@ -19,9 +28,8 @@ export function useApi<T>(endpoint: string, options?: RequestInit): ApiResponse<
         setLoading(true)
         setError(null)
         
-        // Replace with your API base URL
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.example.com'
-        const response = await fetch(`${baseUrl}${endpoint}`, {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
+        const response = await fetch(buildApiUrl(endpoint, baseUrl), {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
@@ -51,18 +59,19 @@ export function useApi<T>(endpoint: string, options?: RequestInit): ApiResponse<
 }
 
 export async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.example.com'
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
   const token = localStorage.getItem('token')
+  const fullUrl = buildApiUrl(endpoint, baseUrl)
   
   console.log('🌐 API Call:', {
     endpoint,
     baseUrl,
-    fullUrl: `${baseUrl}${endpoint}`,
+    fullUrl,
     hasToken: !!token,
     method: options?.method || 'GET'
   })
   
-  const response = await fetch(`${baseUrl}${endpoint}`, {
+  const response = await fetch(fullUrl, {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token || ''}`,

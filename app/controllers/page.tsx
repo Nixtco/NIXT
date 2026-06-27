@@ -82,6 +82,7 @@ import {
   loadFinancialTransactions,
   addFinancialTransaction,
   deleteFinancialTransaction,
+  buildFinanceTransactionsFromProjects,
   computeFinanceStats,
   getTransactionDescription,
   getTransactionReference,
@@ -285,7 +286,7 @@ function ControllersContent() {
 
   // Projects data is now fetched from API (see useEffect below)
 
-  // Financial data (manual entries, persisted locally)
+  // Financial data (merged from backend projects and local manual entries)
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState(false)
   const [financeSuccess, setFinanceSuccess] = useState<string | null>(null)
@@ -370,11 +371,17 @@ function ControllersContent() {
   const loadFinanceTransactions = useCallback(() => {
     setTransactionsLoading(true)
     try {
-      setTransactions(loadFinancialTransactions())
+      const persistedManualTransactions = loadFinancialTransactions()
+      setTransactions(prev => {
+        const manualTransactions = prev.filter(tx => !tx.id.startsWith('project-'))
+        const mergedManualTransactions = manualTransactions.length > 0 ? manualTransactions : persistedManualTransactions
+        const backendTransactions = buildFinanceTransactionsFromProjects(projects, isRTL)
+        return [...backendTransactions, ...mergedManualTransactions]
+      })
     } finally {
       setTransactionsLoading(false)
     }
-  }, [])
+  }, [projects, isRTL])
 
   useEffect(() => {
     loadFinanceTransactions()

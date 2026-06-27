@@ -134,6 +134,60 @@ export function getTransactionDescription(tx: FinanceTransaction, isRTL = false)
   return isRTL ? `${label}: ${ref}` : `${label}: ${ref}`
 }
 
+export interface FinanceProjectLike {
+  id: string
+  name?: string
+  price?: number
+  spent?: number
+  status?: string
+  user_id?: string
+  created_at?: string
+  start_date?: string | null
+}
+
+export function buildFinanceTransactionsFromProjects(
+  projects: FinanceProjectLike[] = [],
+  isRTL = false
+): FinanceTransaction[] {
+  return projects.flatMap((project) => {
+    const projectName = project.name?.trim() || (isRTL ? 'مشروع غير محدد' : 'Untitled project')
+    const revenueAmount = Number(project.price) || 0
+    const expenseAmount = Number(project.spent) || 0
+    const createdAt = project.created_at || project.start_date || new Date().toISOString()
+    const isCompleted = String(project.status || '').toLowerCase() === 'completed'
+
+    const transactions: FinanceTransaction[] = []
+
+    if (revenueAmount > 0) {
+      transactions.push({
+        id: `project-${project.id}-income`,
+        type: 'income',
+        amount: revenueAmount,
+        date: createdAt,
+        status: isCompleted ? 'completed' : 'pending',
+        createdAt,
+        projectId: project.id,
+        projectName,
+      })
+    }
+
+    if (expenseAmount > 0) {
+      transactions.push({
+        id: `project-${project.id}-expense`,
+        type: 'expense',
+        amount: expenseAmount,
+        date: createdAt,
+        status: isCompleted ? 'completed' : 'pending',
+        createdAt,
+        projectId: project.id,
+        projectName,
+      })
+    }
+
+    return transactions
+  })
+}
+
 export function computeFinanceStats(transactions: FinanceTransaction[]) {
   const completed = transactions.filter(t => t.status === 'completed')
   const pending = transactions.filter(t => t.status === 'pending')

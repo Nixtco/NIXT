@@ -92,7 +92,7 @@ export default function AccountPage() {
 
                 {/* Profile Card */}
                 <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl shadow-xl p-8 border border-gray-700">
-                    {/* Avatar & Name */}
+                    {/* Avatar && Name */}
                     <div className="flex items-center gap-6 mb-8 pb-8 border-b border-gray-700">
                         <div className="relative">
                             {user.avatar_url ? (

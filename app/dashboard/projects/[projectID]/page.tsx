@@ -9,7 +9,6 @@ import FinancialDashboard from '@/components/Dashboard/FinancialDashboard'
 import SupportCenter from '@/components/Dashboard/SupportCenter'
 import ContractDashboard from '@/components/Dashboard/ContractDashboard'
 import DashboardSettings from '@/components/Dashboard/DashboardSettings'
-import ChatWidget from '@/components/UI/ChatWidget'
 import styles from '@/components/Dashboard/Dashboard.module.css'
 import headerStyles from '../../../../components/Header/Header.module.css'
 import ThemeSwitcher from '@/components/UI/ThemeSwitcher'
@@ -182,8 +181,6 @@ function DashboardContent() {
           return <Component key={section.id} {...(section.id === 'project' ? { projectId } : {})} />
         })}
       </div>
-
-      <ChatWidget />
 
       <ThemeSwitcher 
         onThemeChange={nextTheme} 

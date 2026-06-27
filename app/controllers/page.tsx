@@ -19,9 +19,12 @@ import {
   EditIcon,
   TrashIcon,
   LockIcon,
-  UserIcon
+  UserIcon,
+  ImageIcon
 } from '@/components/UI/ControllerIcons'
 import styles from './Controllers.module.css'
+import ProjectMediaManagerModal from '@/components/Projects/ProjectMediaManagerModal'
+import { getProjectMediaCount } from '@/lib/projectMediaStorage'
 import {
   type Project as APIProject,
   type ProjectStatistics,
@@ -69,6 +72,21 @@ import {
 } from '../dashboard/contract/[contractNumber]/apiFunctions'
 
 import { generateMandatoryClauses, isMandatoryClause, MANDATORY_CLAUSES_COUNT } from '@/utils/mandatoryClauses'
+import ChatWidget from '@/components/UI/ChatWidget'
+import {
+  type FinanceTransaction,
+  type FinanceTransactionType,
+  type ExpenseCategory,
+  FINANCE_TYPE_META,
+  EXPENSE_CATEGORIES,
+  loadFinancialTransactions,
+  addFinancialTransaction,
+  deleteFinancialTransaction,
+  computeFinanceStats,
+  getTransactionDescription,
+  getTransactionReference,
+  exportTransactionsToCsv,
+} from '@/lib/financialTransactions'
 
 // Define interfaces for type safety
 // Client interface now uses API User data
@@ -82,17 +100,6 @@ interface Client extends APIUser {
 }
 
 // Project type is now imported from ../Projects/apiFunctions as APIProject
-
-interface Transaction {
-  id: string
-  type: 'income' | 'expense'
-  amount: number
-  description: string
-  descriptionEn: string
-  date: string
-  status: 'completed' | 'pending' | 'failed'
-  client?: string
-}
 
 interface User {
   id: string
@@ -112,6 +119,7 @@ interface ProjectAdmin {
   id: string
   user_id: string
   permissions: string[]
+  is_developer?: boolean
   created_at?: string
   updated_at?: string
   user?: User
@@ -144,7 +152,8 @@ function ControllersContent() {
   const { addAllowedUser, allowedUsers, removeAllowedUser, updateAllowedUser } = useAuth()
   const isRTL = language === 'ar'
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'clients' | 'projects' | 'finances' | 'users' | 'tickets' | 'analytics' | 'activity'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'clients' | 'projects' | 'finances' | 'users' | 'tickets' | 'analytics' | 'chat'>('overview')
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
 
   // Client add form state
@@ -185,6 +194,7 @@ function ControllersContent() {
 
   // Project details state
   const [viewingProject, setViewingProject] = useState<APIProject | null>(null)
+  const [mediaModalProject, setMediaModalProject] = useState<APIProject | null>(null)
 
   // Progress management state
   const [showProgressModal, setShowProgressModal] = useState(false)
@@ -275,10 +285,24 @@ function ControllersContent() {
 
   // Projects data is now fetched from API (see useEffect below)
 
-  // Financial data (from Backend)
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  // Financial data (manual entries, persisted locally)
+  const [transactions, setTransactions] = useState<FinanceTransaction[]>([])
   const [transactionsLoading, setTransactionsLoading] = useState(false)
-  const [transactionsError, setTransactionsError] = useState<string | null>(null)
+  const [financeSuccess, setFinanceSuccess] = useState<string | null>(null)
+  const [financeFormError, setFinanceFormError] = useState<string | null>(null)
+  const [showFinanceModal, setShowFinanceModal] = useState(false)
+  const [financeModalType, setFinanceModalType] = useState<FinanceTransactionType>('income')
+  const [financeAmount, setFinanceAmount] = useState('')
+  const [financeDate, setFinanceDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [financeNotes, setFinanceNotes] = useState('')
+  const [financeProjectId, setFinanceProjectId] = useState('')
+  const [financeAdminId, setFinanceAdminId] = useState('')
+  const [financeExpenseCategory, setFinanceExpenseCategory] = useState<ExpenseCategory>('server')
+  const [financeCustomCategory, setFinanceCustomCategory] = useState('')
+  const [financeTypeFilter, setFinanceTypeFilter] = useState<'all' | FinanceTransactionType>('all')
+  const [financeSearch, setFinanceSearch] = useState('')
+  const [confirmDeleteFinanceId, setConfirmDeleteFinanceId] = useState<string | null>(null)
+  const [financeSaving, setFinanceSaving] = useState(false)
 
   const mockUsers: User[] = [
     {
@@ -343,101 +367,166 @@ function ControllersContent() {
   // ==================== API Configuration ====================
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
 
-  const mapSubscriptionStatusToTransactionStatus = (
-    status?: string
-  ): Transaction['status'] => {
-    const normalized = (status || '').toLowerCase()
-    if (normalized === 'active' || normalized === 'trialing') return 'completed'
-    if (normalized === 'incomplete' || normalized === 'past_due') return 'pending'
-    if (
-      normalized === 'canceled' ||
-      normalized === 'cancelled' ||
-      normalized === 'unpaid' ||
-      normalized === 'paused' ||
-      normalized === 'incomplete_expired'
-    ) {
-      return 'failed'
-    }
-    // Fallback: treat unknown statuses as pending
-    return 'pending'
-  }
-
-  const centsToDollars = (amount?: unknown) => {
-    const n = typeof amount === 'number' ? amount : Number(amount)
-    if (!Number.isFinite(n)) return 0
-    return n / 100
-  }
-
-  const fetchFinancialTransactions = useCallback(async () => {
-    if (!token) return
+  const loadFinanceTransactions = useCallback(() => {
     setTransactionsLoading(true)
-    setTransactionsError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/projects?limit=1000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!res.ok) {
-        const message = isRTL
-          ? 'فشل في جلب بيانات المعاملات المالية'
-          : 'Failed to load financial transactions'
-        setTransactionsError(message)
-        setTransactions([])
-        return
-      }
-
-      const json = await res.json()
-      const projects: APIProject[] = Array.isArray(json?.data) ? json.data : []
-
-      const mapped: Transaction[] = projects.flatMap((project) => {
-        const projectName = String(project.name || 'Project')
-        const revenueAmount = centsToDollars(project.price)
-        const spentAmount = centsToDollars(project.spent)
-        const pendingAmount = Math.max(0, revenueAmount - spentAmount)
-        const date = project.created_at || project.start_date || new Date().toISOString()
-        const isCompleted = project.status === 'completed' || pendingAmount === 0
-
-        const revenueTransaction: Transaction = {
-          id: `${project.id}-revenue`,
-          type: 'income',
-          amount: isCompleted ? revenueAmount : pendingAmount,
-          description: `إيراد المشروع: ${projectName}`,
-          descriptionEn: `Project revenue: ${projectName}`,
-          date,
-          status: isCompleted ? 'completed' : 'pending',
-          client: project.user_id,
-        }
-
-        const expenseTransaction: Transaction | null = spentAmount > 0
-          ? {
-              id: `${project.id}-expense`,
-              type: 'expense',
-              amount: spentAmount,
-              description: `مصروف المشروع: ${projectName}`,
-              descriptionEn: `Project expense: ${projectName}`,
-              date,
-              status: 'completed',
-              client: project.user_id,
-            }
-          : null
-
-        return expenseTransaction ? [revenueTransaction, expenseTransaction] : [revenueTransaction]
-      })
-
-      setTransactions(mapped)
-    } catch {
-      setTransactionsError(isRTL ? 'تعذر الاتصال بالخادم' : 'Could not connect to server')
-      setTransactions([])
+      setTransactions(loadFinancialTransactions())
     } finally {
       setTransactionsLoading(false)
     }
-  }, [API_BASE_URL, isRTL, token])
+  }, [])
 
   useEffect(() => {
-    fetchFinancialTransactions()
-  }, [fetchFinancialTransactions])
+    loadFinanceTransactions()
+  }, [loadFinanceTransactions])
+
+  const getAdminDisplayName = useCallback((admin: ProjectAdmin) => {
+    const u = admin.user
+    if (!u) return admin.user_id
+    return u.display_name || [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || admin.user_id
+  }, [])
+
+  const resetFinanceForm = useCallback(() => {
+    setFinanceAmount('')
+    setFinanceDate(new Date().toISOString().slice(0, 10))
+    setFinanceNotes('')
+    setFinanceProjectId('')
+    setFinanceAdminId('')
+    setFinanceExpenseCategory('server')
+    setFinanceCustomCategory('')
+    setFinanceFormError(null)
+  }, [])
+
+  const openFinanceModal = useCallback((type: FinanceTransactionType) => {
+    resetFinanceForm()
+    setFinanceModalType(type)
+    setShowFinanceModal(true)
+  }, [resetFinanceForm])
+
+  const closeFinanceModal = useCallback(() => {
+    setShowFinanceModal(false)
+    resetFinanceForm()
+  }, [resetFinanceForm])
+
+  const handleSaveFinanceTransaction = useCallback(() => {
+    const amount = parseFloat(financeAmount)
+    if (!financeAmount || !Number.isFinite(amount) || amount <= 0) {
+      setFinanceFormError(t.controllers.finances.required)
+      return
+    }
+    if (!financeDate) {
+      setFinanceFormError(t.controllers.finances.required)
+      return
+    }
+
+    let projectName: string | undefined
+    let adminName: string | undefined
+
+    if (financeModalType === 'income' || financeModalType === 'refund') {
+      if (!financeProjectId) {
+        setFinanceFormError(t.controllers.finances.required)
+        return
+      }
+      const project = projects.find(p => p.id === financeProjectId)
+      projectName = project?.name || financeProjectId
+    }
+
+    if (financeModalType === 'withdrawal') {
+      if (!financeAdminId) {
+        setFinanceFormError(t.controllers.finances.required)
+        return
+      }
+      const admin = admins.find(a => a.user_id === financeAdminId)
+      adminName = admin ? getAdminDisplayName(admin) : financeAdminId
+    }
+
+    if (financeModalType === 'expense' && financeExpenseCategory === 'other' && !financeCustomCategory.trim()) {
+      setFinanceFormError(t.controllers.finances.required)
+      return
+    }
+
+    setFinanceSaving(true)
+    try {
+      const newTx = addFinancialTransaction({
+        type: financeModalType,
+        amount,
+        date: new Date(financeDate).toISOString(),
+        notes: financeNotes.trim() || undefined,
+        status: 'completed',
+        projectId: financeProjectId || undefined,
+        projectName,
+        adminUserId: financeAdminId || undefined,
+        adminName,
+        expenseCategory: financeModalType === 'expense' ? financeExpenseCategory : undefined,
+        expenseCategoryCustom: financeExpenseCategory === 'other' ? financeCustomCategory.trim() : undefined,
+      })
+      setTransactions(prev => [newTx, ...prev])
+      setFinanceSuccess(t.controllers.finances.saved)
+      closeFinanceModal()
+      setTimeout(() => setFinanceSuccess(null), 3000)
+    } finally {
+      setFinanceSaving(false)
+    }
+  }, [
+    financeAmount,
+    financeDate,
+    financeModalType,
+    financeProjectId,
+    financeAdminId,
+    financeExpenseCategory,
+    financeCustomCategory,
+    financeNotes,
+    projects,
+    admins,
+    getAdminDisplayName,
+    t.controllers.finances,
+    closeFinanceModal,
+  ])
+
+  const handleDeleteFinanceTransaction = useCallback((id: string) => {
+    deleteFinancialTransaction(id)
+    setTransactions(prev => prev.filter(tx => tx.id !== id))
+    setConfirmDeleteFinanceId(null)
+    setFinanceSuccess(t.controllers.finances.deleted)
+    setTimeout(() => setFinanceSuccess(null), 3000)
+  }, [t.controllers.finances.deleted])
+
+  const filteredFinanceTransactions = useMemo(() => {
+    let result = [...transactions]
+    if (financeTypeFilter !== 'all') {
+      result = result.filter(tx => tx.type === financeTypeFilter)
+    }
+    if (financeSearch.trim()) {
+      const q = financeSearch.toLowerCase()
+      result = result.filter(tx =>
+        getTransactionDescription(tx, isRTL).toLowerCase().includes(q) ||
+        getTransactionReference(tx, isRTL).toLowerCase().includes(q) ||
+        tx.notes?.toLowerCase().includes(q)
+      )
+    }
+    return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [transactions, financeTypeFilter, financeSearch, isRTL])
+
+  const handleExportFinances = useCallback(() => {
+    const csv = exportTransactionsToCsv(filteredFinanceTransactions, isRTL)
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `nixt-finances-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [filteredFinanceTransactions, isRTL])
+
+  const getFinanceTypeLabel = useCallback((type: FinanceTransactionType) => {
+    const labels: Record<FinanceTransactionType, string> = {
+      income: t.controllers.finances.income,
+      withdrawal: t.controllers.finances.withdrawal,
+      expense: t.controllers.finances.expenses,
+      refund: t.controllers.finances.refund,
+    }
+    return labels[type]
+  }, [t.controllers.finances])
 
   // ==================== Admin Management Functions ====================
 
@@ -463,6 +552,7 @@ function ControllersContent() {
         const adminsWithUsers = await Promise.all(
           adminsData.map(async (admin: ProjectAdmin) => {
             try {
+              // console.log(' 😀😀😀 admin data to fetch user data :: ', admin);
               const userResponse = await fetch(`${API_BASE_URL}/users/${admin.user_id}`, {
                 headers: {
                   'Authorization': `Bearer ${token}`
@@ -470,7 +560,8 @@ function ControllersContent() {
               })
               if (userResponse.ok) {
                 const userData = await userResponse.json()
-                return { ...admin, user: userData.data }
+                // console.log(' 😀😀😀 user data :: ', userData);
+                return { ...admin, user: Array.isArray(userData.data) ? userData.data[0] : userData.data }
               }
             } catch {
               // Ignore error
@@ -478,7 +569,7 @@ function ControllersContent() {
             return admin
           })
         )
-        
+        console.log(' 😀😀😀 adminsWithUsers :: ', adminsWithUsers);
         setAdmins(adminsWithUsers)
       } else if (response.status === 403) {
         setAdminError(isRTL ? 'ليس لديك صلاحية للوصول إلى هذه الصفحة' : 'You do not have permission to access this page')
@@ -590,7 +681,7 @@ function ControllersContent() {
   }
 
   // Update admin permissions
-  const handleUpdatePermissions = async (permissions: string[]) => {
+  const handleUpdatePermissions = async (permissions: string[], is_developer: boolean) => {
     if (!token || !selectedAdmin) return
 
     setIsSubmitting(true)
@@ -603,7 +694,7 @@ function ControllersContent() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ permissions })
+        body: JSON.stringify({ permissions, is_developer })
       })
 
       if (response.ok) {
@@ -705,6 +796,15 @@ function ControllersContent() {
   const showProjectSuccess = (msg: string) => {
     setProjectSuccess(msg)
     setTimeout(() => setProjectSuccess(null), 3000)
+  }
+
+  const handleMediaSaved = (projectId: string, media: APIProject['media_updates']) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, media_updates: media } : p))
+    )
+    showProjectSuccess(
+      isRTL ? 'تم حفظ وسائط المشروع ونشرها للعميل' : 'Project media saved and published to client'
+    )
   }
 
   const refreshProjectData = async () => {
@@ -1618,17 +1718,7 @@ function ControllersContent() {
     const activeProjects = projectStats?.byStatus.active ?? projects.filter(p => p.status === 'active').length
     const completedProjects = projectStats?.byStatus.completed ?? projects.filter(p => p.status === 'completed').length
     
-    const totalRevenue = transactions
-      .filter(t => t.type === 'income' && t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0)
-    
-    const pendingRevenue = transactions
-      .filter(t => t.type === 'income' && t.status === 'pending')
-      .reduce((sum, t) => sum + t.amount, 0)
-    
-    const totalExpenses = transactions
-      .filter(t => t.type === 'expense' && t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0)
+    const financeStats = computeFinanceStats(transactions)
 
     return {
       totalClients,
@@ -1636,10 +1726,13 @@ function ControllersContent() {
       totalProjects,
       activeProjects,
       completedProjects,
-      totalRevenue,
-      pendingRevenue,
-      totalExpenses,
-      netProfit: totalRevenue - totalExpenses
+      totalRevenue: financeStats.totalIncome,
+      pendingRevenue: financeStats.pendingIncome,
+      totalExpenses: financeStats.totalExpenses,
+      totalWithdrawals: financeStats.totalWithdrawals,
+      totalRefunds: financeStats.totalRefunds,
+      totalOutflow: financeStats.totalOutflow,
+      netProfit: financeStats.netBalance,
     }
   }, [clients, projects, transactions, projectStats])
 
@@ -1922,10 +2015,13 @@ function ControllersContent() {
           {t.controllers.users.title}
         </button>
         <button
-          className={`${styles.tab} ${activeTab === 'activity' ? styles.activeTab : ''}`}
-          onClick={() => setActiveTab('activity')}
+          className={`${styles.tab} ${activeTab === 'chat' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('chat')}
         >
-          {t.controllers.activity.title}
+          {isRTL ? 'المحادثات' : 'Messages'}
+          {chatUnreadCount > 0 && (
+            <span className={styles.tabBadge}>{chatUnreadCount}</span>
+          )}
         </button>
 
       </div>
@@ -2924,6 +3020,35 @@ function ControllersContent() {
                       <div className={styles.projectFooter}>
                         <span className={styles.teamInfo}><UsersIcon size={16} /> {project.team?.length || 0} {isRTL ? 'أعضاء' : 'members'}</span>
                         <div className={styles.actionButtons}>
+                          <button
+                            className={styles.iconBtn}
+                            onClick={() => setMediaModalProject(project)}
+                            title={isRTL ? 'معرض الوسائط' : 'Media Gallery'}
+                            style={{ color: '#a855f7', position: 'relative' }}
+                          >
+                            <ImageIcon size={18} />
+                            {getProjectMediaCount(project.id, project.media_updates) > 0 && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '-4px',
+                                right: '-4px',
+                                minWidth: '16px',
+                                height: '16px',
+                                padding: '0 4px',
+                                borderRadius: '8px',
+                                background: '#7042f8',
+                                color: '#fff',
+                                fontSize: '0.6rem',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                lineHeight: 1,
+                              }}>
+                                {getProjectMediaCount(project.id, project.media_updates)}
+                              </span>
+                            )}
+                          </button>
                           <button 
                             className={styles.iconBtn} 
                             onClick={() => openContractDialog(project)} 
@@ -2955,6 +3080,16 @@ function ControllersContent() {
                   )
                 })}
               </div>
+            )}
+
+            {/* Project Media Gallery Modal */}
+            {mediaModalProject && (
+              <ProjectMediaManagerModal
+                project={mediaModalProject}
+                isRTL={isRTL}
+                onClose={() => setMediaModalProject(null)}
+                onSaved={handleMediaSaved}
+              />
             )}
 
             {/* Project Details Modal */}
@@ -4312,16 +4447,56 @@ function ControllersContent() {
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>{t.controllers.finances.title}</h2>
               <div className={styles.sectionActions}>
-                <button className={styles.secondaryBtn}>{t.controllers.finances.export}</button>
-                <button className={styles.primaryBtn}>{t.controllers.finances.add}</button>
+                <button className={styles.secondaryBtn} onClick={handleExportFinances}>
+                  {t.controllers.finances.export}
+                </button>
               </div>
             </div>
 
+            {financeSuccess && (
+              <div className={styles.financeSuccess}>{financeSuccess}</div>
+            )}
+
+            {/* Quick Add — 4 equal type cards */}
+            <h3 className={styles.subsectionTitle}>{t.controllers.finances.quickAdd}</h3>
+            <div className={styles.financeTypeGrid}>
+              {([
+                { type: 'income' as FinanceTransactionType, icon: '+', hint: isRTL ? 'دفعة مشروع' : 'Project payment' },
+                { type: 'withdrawal' as FinanceTransactionType, icon: '↓', hint: isRTL ? 'سحب مسؤول' : 'Admin withdrawal' },
+                { type: 'expense' as FinanceTransactionType, icon: '−', hint: isRTL ? 'خادم، دومين...' : 'Server, domain...' },
+                { type: 'refund' as FinanceTransactionType, icon: '↩', hint: isRTL ? 'إرجاع لمشروع' : 'Project refund' },
+              ]).map(({ type, icon, hint }) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={styles.financeTypeCard}
+                  onClick={() => openFinanceModal(type)}
+                  style={{ borderColor: `${FINANCE_TYPE_META[type].color}33` }}
+                >
+                  <div
+                    className={styles.financeTypeIcon}
+                    style={{ background: `${FINANCE_TYPE_META[type].color}22`, color: FINANCE_TYPE_META[type].color }}
+                  >
+                    {icon}
+                  </div>
+                  <p className={styles.financeTypeLabel}>{getFinanceTypeLabel(type)}</p>
+                  <p className={styles.financeTypeHint}>{hint}</p>
+                </button>
+              ))}
+            </div>
+
+            {/* Summary cards */}
             <div className={styles.financeCards}>
               <div className={styles.financeCard}>
-                <h4>{t.controllers.finances.totalRevenue}</h4>
+                <h4>{t.controllers.finances.income}</h4>
                 <p className={styles.financeAmount} style={{ color: '#00C781' }}>
                   {formatCurrency(stats.totalRevenue)}
+                </p>
+              </div>
+              <div className={styles.financeCard}>
+                <h4>{t.controllers.finances.withdrawal}</h4>
+                <p className={styles.financeAmount} style={{ color: '#7042F8' }}>
+                  {formatCurrency(stats.totalWithdrawals)}
                 </p>
               </div>
               <div className={styles.financeCard}>
@@ -4331,87 +4506,282 @@ function ControllersContent() {
                 </p>
               </div>
               <div className={styles.financeCard}>
-                <h4>{t.controllers.finances.profit}</h4>
-                <p className={styles.financeAmount} style={{ color: '#0070F3' }}>
-                  {formatCurrency(stats.netProfit)}
+                <h4>{t.controllers.finances.refund}</h4>
+                <p className={styles.financeAmount} style={{ color: '#FF8C00' }}>
+                  {formatCurrency(stats.totalRefunds)}
                 </p>
               </div>
-              <div className={styles.financeCard}>
-                <h4>{t.controllers.finances.pending}</h4>
-                <p className={styles.financeAmount} style={{ color: '#FF8C00' }}>
-                  {formatCurrency(stats.pendingRevenue)}
+              <div className={styles.financeCard} style={{ gridColumn: 'span 1' }}>
+                <h4>{t.controllers.finances.netBalance}</h4>
+                <p className={styles.financeAmount} style={{ color: stats.netProfit >= 0 ? '#0070F3' : '#FF4444' }}>
+                  {formatCurrency(stats.netProfit)}
                 </p>
               </div>
             </div>
 
             <div className={styles.tableContainer}>
-              <h3 className={styles.subsectionTitle}>{t.controllers.finances.transactions}</h3>
+
+              <div className={styles.financeFilters}>
+                <select
+                  className={styles.financeFilterSelect}
+                  value={financeTypeFilter}
+                  onChange={(e) => setFinanceTypeFilter(e.target.value as typeof financeTypeFilter)}
+                >
+                  <option value="all">{t.controllers.finances.filterAll}</option>
+                  <option value="income">{t.controllers.finances.income}</option>
+                  <option value="withdrawal">{t.controllers.finances.withdrawal}</option>
+                  <option value="expense">{t.controllers.finances.expenses}</option>
+                  <option value="refund">{t.controllers.finances.refund}</option>
+                </select>
+                <input
+                  type="text"
+                  className={styles.financeSearchInput}
+                  placeholder={t.controllers.finances.search}
+                  value={financeSearch}
+                  onChange={(e) => setFinanceSearch(e.target.value)}
+                />
+              </div>
+
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>{isRTL ? 'النوع' : 'Type'}</th>
+                    <th>{t.controllers.finances.type}</th>
                     <th>{t.financial.description}</th>
+                    <th>{t.controllers.finances.reference}</th>
                     <th>{t.financial.amount}</th>
                     <th>{t.financial.date}</th>
                     <th>{t.financial.status}</th>
-                    <th>{isRTL ? 'العميل' : 'Client'}</th>
+                    <th>{isRTL ? 'إجراء' : 'Action'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {transactionsLoading ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '1.25rem', color: 'rgba(255,255,255,0.7)' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '1.25rem', color: 'rgba(255,255,255,0.7)' }}>
                         {isRTL ? 'جاري تحميل المعاملات...' : 'Loading transactions...'}
                       </td>
                     </tr>
-                  ) : transactionsError ? (
+                  ) : filteredFinanceTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '1.25rem', color: '#ff6b6b' }}>
-                        {transactionsError}
-                      </td>
-                    </tr>
-                  ) : transactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '1.25rem', color: 'rgba(255,255,255,0.7)' }}>
-                        {isRTL ? 'لا توجد معاملات لعرضها' : 'No transactions to display'}
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '1.25rem', color: 'rgba(255,255,255,0.7)' }}>
+                        {t.controllers.finances.noTransactions}
                       </td>
                     </tr>
                   ) : (
-                    transactions.map(transaction => (
-                      <tr key={transaction.id}>
-                        <td>
-                          <span 
-                            className={styles.badge}
-                            style={{ 
-                              backgroundColor: transaction.type === 'income' ? '#00C781' : '#FF4444' 
-                            }}
-                          >
-                            {transaction.type === 'income' ? (isRTL ? 'دخل' : 'Income') : (isRTL ? 'مصروف' : 'Expense')}
-                          </span>
-                        </td>
-                        <td>{isRTL ? transaction.description : transaction.descriptionEn}</td>
-                        <td style={{ 
-                          color: transaction.type === 'income' ? '#00C781' : '#FF4444',
-                          fontWeight: 'bold'
-                        }}>
-                          {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                        </td>
-                        <td>{formatDate(transaction.date)}</td>
-                        <td>
-                          <span 
-                            className={styles.badge}
-                            style={{ backgroundColor: getStatusColor(transaction.status) }}
-                          >
-                            {transaction.status}
-                          </span>
-                        </td>
-                        <td>{transaction.client || '-'}</td>
-                      </tr>
-                    ))
+                    filteredFinanceTransactions.map(transaction => {
+                      const meta = FINANCE_TYPE_META[transaction.type]
+                      return (
+                        <tr key={transaction.id}>
+                          <td>
+                            <span className={styles.badge} style={{ backgroundColor: meta.color }}>
+                              {getFinanceTypeLabel(transaction.type)}
+                            </span>
+                          </td>
+                          <td>{getTransactionDescription(transaction, isRTL)}</td>
+                          <td>{getTransactionReference(transaction, isRTL)}</td>
+                          <td style={{ color: meta.color, fontWeight: 'bold' }}>
+                            {meta.sign}{formatCurrency(transaction.amount)}
+                          </td>
+                          <td>{formatDate(transaction.date)}</td>
+                          <td>
+                            <span className={styles.badge} style={{ backgroundColor: getStatusColor(transaction.status) }}>
+                              {transaction.status === 'completed'
+                                ? t.financial.completed
+                                : transaction.status === 'pending'
+                                  ? t.financial.pending
+                                  : t.financial.failed}
+                            </span>
+                          </td>
+                          <td>
+                            {confirmDeleteFinanceId === transaction.id ? (
+                              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                <button
+                                  className={styles.financeDeleteBtn}
+                                  onClick={() => handleDeleteFinanceTransaction(transaction.id)}
+                                >
+                                  {isRTL ? 'تأكيد' : 'Confirm'}
+                                </button>
+                                <button
+                                  className={styles.secondaryBtn}
+                                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}
+                                  onClick={() => setConfirmDeleteFinanceId(null)}
+                                >
+                                  {t.controllers.finances.cancel}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className={styles.financeDeleteBtn}
+                                onClick={() => setConfirmDeleteFinanceId(transaction.id)}
+                              >
+                                {t.controllers.finances.delete}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Add Transaction Modal */}
+            {showFinanceModal && (
+              <div className={styles.modalOverlay} onClick={closeFinanceModal}>
+                <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+                  <h3 style={{ marginBottom: '0.5rem', color: '#fff' }}>
+                    {financeModalType === 'income' && t.controllers.finances.addIncome}
+                    {financeModalType === 'withdrawal' && t.controllers.finances.addWithdrawal}
+                    {financeModalType === 'expense' && t.controllers.finances.addExpense}
+                    {financeModalType === 'refund' && t.controllers.finances.addRefund}
+                  </h3>
+                  <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                    <span
+                      className={styles.badge}
+                      style={{ backgroundColor: FINANCE_TYPE_META[financeModalType].color }}
+                    >
+                      {getFinanceTypeLabel(financeModalType)}
+                    </span>
+                  </p>
+
+                  {financeFormError && (
+                    <div className={styles.financeError} style={{ marginBottom: '1rem' }}>{financeFormError}</div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {(financeModalType === 'income' || financeModalType === 'refund') && (
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          {t.controllers.finances.selectProject} *
+                        </label>
+                        <select
+                          className={styles.formInput}
+                          style={{ margin: 0, width: '100%' }}
+                          value={financeProjectId}
+                          onChange={(e) => setFinanceProjectId(e.target.value)}
+                        >
+                          <option value="">{t.controllers.finances.selectProject}</option>
+                          {projects.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {financeModalType === 'withdrawal' && (
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          {t.controllers.finances.selectAdmin} *
+                        </label>
+                        <select
+                          className={styles.formInput}
+                          style={{ margin: 0, width: '100%' }}
+                          value={financeAdminId}
+                          onChange={(e) => setFinanceAdminId(e.target.value)}
+                        >
+                          <option value="">{t.controllers.finances.selectAdmin}</option>
+                          {admins.map(admin => (
+                            <option key={admin.id} value={admin.user_id}>
+                              {getAdminDisplayName(admin)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {financeModalType === 'expense' && (
+                      <>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                            {t.controllers.finances.selectCategory} *
+                          </label>
+                          <select
+                            className={styles.formInput}
+                            style={{ margin: 0, width: '100%' }}
+                            value={financeExpenseCategory}
+                            onChange={(e) => setFinanceExpenseCategory(e.target.value as ExpenseCategory)}
+                          >
+                            {EXPENSE_CATEGORIES.map(cat => (
+                              <option key={cat.key} value={cat.key}>
+                                {isRTL ? cat.labelAr : cat.labelEn}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {financeExpenseCategory === 'other' && (
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                              {t.controllers.finances.customCategory} *
+                            </label>
+                            <input
+                              type="text"
+                              className={styles.formInput}
+                              style={{ margin: 0, width: '100%' }}
+                              value={financeCustomCategory}
+                              onChange={(e) => setFinanceCustomCategory(e.target.value)}
+                              placeholder={isRTL ? 'مثال: تصميم، استشارة...' : 'e.g. Design, consulting...'}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          {t.controllers.finances.amount} *
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          className={styles.formInput}
+                          style={{ margin: 0, width: '100%' }}
+                          value={financeAmount}
+                          onChange={(e) => setFinanceAmount(e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          {t.controllers.finances.date} *
+                        </label>
+                        <input
+                          type="date"
+                          className={styles.formInput}
+                          style={{ margin: 0, width: '100%' }}
+                          value={financeDate}
+                          onChange={(e) => setFinanceDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        {t.controllers.finances.notes}
+                      </label>
+                      <textarea
+                        className={styles.formInput}
+                        style={{ margin: 0, width: '100%', minHeight: '80px', resize: 'vertical' }}
+                        value={financeNotes}
+                        onChange={(e) => setFinanceNotes(e.target.value)}
+                        placeholder={isRTL ? 'تفاصيل إضافية...' : 'Additional details...'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.financeModalActions}>
+                    <button className={styles.secondaryBtn} onClick={closeFinanceModal} disabled={financeSaving}>
+                      {t.controllers.finances.cancel}
+                    </button>
+                    <button className={styles.primaryBtn} onClick={handleSaveFinanceTransaction} disabled={financeSaving}>
+                      {financeSaving ? (isRTL ? 'جاري الحفظ...' : 'Saving...') : t.controllers.finances.save}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -4475,6 +4845,7 @@ function ControllersContent() {
                     <th>{isRTL ? 'المسؤول' : 'Admin'}</th>
                     <th>{isRTL ? 'البريد الإلكتروني' : 'Email'}</th>
                     <th>{isRTL ? 'الصلاحيات' : 'Permissions'}</th>
+                    <th>{isRTL ? 'مطور' : 'Developer'}</th>
                     <th>{isRTL ? 'تاريخ الإضافة' : 'Date Added'}</th>
                     <th>{isRTL ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
@@ -4482,7 +4853,7 @@ function ControllersContent() {
                 <tbody>
                   {isLoadingAdmins ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '3rem' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
                         </div>
@@ -4490,7 +4861,7 @@ function ControllersContent() {
                     </tr>
                   ) : filteredAdmins.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                         {isRTL ? 'لم يتم العثور على مسؤولين' : 'No admins found'}
                       </td>
                     </tr>
@@ -4576,6 +4947,25 @@ function ControllersContent() {
                               </span>
                             )}
                           </div>
+                        </td>
+                        <td>
+                          <span
+                            title={admin.is_developer ? (isRTL ? 'مطور' : 'Developer') : (isRTL ? 'ليس مطوراً' : 'Not a developer')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '8px',
+                              fontSize: '1rem',
+                              fontWeight: '700',
+                              background: admin.is_developer ? 'rgba(0, 199, 129, 0.15)' : 'rgba(255, 68, 68, 0.12)',
+                              color: admin.is_developer ? '#00C781' : '#FF6B6B',
+                            }}
+                          >
+                            {admin.is_developer ? '✓' : '✗'}
+                          </span>
                         </td>
                         <td>
                           <span style={{ color: '#94a3b8' }}>
@@ -4799,6 +5189,11 @@ function ControllersContent() {
                   background: '#1E293B',
                   borderRadius: '20px',
                   padding: '2rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flexWrap: 'nowrap',
+                  height: '100%',
+                  gap: '0.75rem',
                   width: '100%',
                   maxWidth: '500px',
                   border: '1px solid rgba(255, 255, 255, 0.1)'
@@ -4847,29 +5242,22 @@ function ControllersContent() {
           </div>
         )}
 
-        {/* Activity Tab */}
-        {activeTab === 'activity' && (
-          <div className={styles.activitySection}>
+        {/* Messages Tab */}
+        {activeTab === 'chat' && (
+          <div className={styles.chatAdminSection}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>{t.controllers.activity.title}</h2>
-              <button className={styles.secondaryBtn}>{t.controllers.activity.filter}</button>
+              <div>
+                <h2 className={styles.sectionTitle}>
+                  {isRTL ? 'مركز المحادثات' : 'Messages Center'}
+                </h2>
+                <p className={styles.sectionSubtitle}>
+                  {isRTL
+                    ? 'تابع رسائل العملاء ورد عليهم مباشرة من هنا'
+                    : 'Monitor client messages and reply directly from here'}
+                </p>
+              </div>
             </div>
-
-            <div className={styles.activityTimeline}>
-              {activities.map(activity => (
-                <div key={activity.id} className={styles.timelineItem}>
-                  <div className={styles.timelineDot} />
-                  <div className={styles.timelineContent}>
-                    <div className={styles.timelineHeader}>
-                      <strong>{activity.user}</strong>
-                      <span className={styles.timelineTime}>{formatDateTime(activity.time)}</span>
-                    </div>
-                    <p className={styles.timelineAction}>{isRTL ? activity.action : activity.actionEn}</p>
-                    <p className={styles.timelineDetails}>{isRTL ? activity.details : activity.detailsEn}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ChatWidget mode="admin" onUnreadChange={setChatUnreadCount} />
           </div>
         )}
 
@@ -5392,12 +5780,15 @@ function PermissionsModalContent({
 }: {
   admin: ProjectAdmin
   onClose: () => void
-  onSave: (permissions: string[]) => void
+  onSave: (permissions: string[], is_developer: boolean) => void
   isSubmitting: boolean
   isRTL: boolean
 }) {
   const [permissions, setPermissions] = useState<string[]>(admin.permissions || [])
-
+  const [isDeveloper, setIsDeveloper] = useState<boolean>(admin.is_developer || false)
+  const toggleDeveloper = () => {
+    setIsDeveloper(prev => !prev)
+  }
   const togglePermission = (key: string) => {
     setPermissions(prev =>
       prev.includes(key)
@@ -5407,50 +5798,107 @@ function PermissionsModalContent({
   }
 
   return (
-    <div>
-      <div style={{ marginBottom: '1.5rem' }}>
-        {AVAILABLE_PERMISSIONS.map(perm => (
-          <label
-            key={perm.key}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              padding: '1rem',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              marginBottom: '0.75rem',
-              background: permissions.includes(perm.key) ? 'rgba(0, 112, 243, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-              border: permissions.includes(perm.key) ? '1px solid rgba(0, 112, 243, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-              transition: 'all 0.2s'
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={permissions.includes(perm.key)}
-              onChange={() => togglePermission(perm.key)}
-              style={{
-                width: '20px',
-                height: '20px',
-                cursor: 'pointer',
-                accentColor: '#0070F3'
-              }}
-            />
-            <div style={{ flex: 1 }}>
-              <p style={{ color: '#fff', fontWeight: '500', marginBottom: '0.25rem' }}>
-                {isRTL ? perm.labelAr : perm.label}
-              </p>
-              <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                {isRTL ? perm.descriptionAr : perm.description}
-              </p>
-            </div>
-          </label>
-        ))}
-      </div>
+    <>
+      <label
+        key="is_developer"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1rem',
+          borderRadius: '12px',
+          marginBottom: '0.75rem',
+          background: isDeveloper
+            ? 'rgba(0, 112, 243, 0.15)'
+            : 'rgba(255, 255, 255, 0.05)',
+          border: isDeveloper
+            ? '1px solid rgba(0, 112, 243, 0.4)'
+            : '1px solid rgba(255, 255, 255, 0.1)',
+          transition: 'all 0.25s'
+        }}
+      >
+        {/* Text */}
+        <div>
+          <p style={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}>
+            {isRTL ? 'مطور' : 'Developer'}
+          </p>
+          <p style={{ color: '#94a3b8', fontSize: 13 }}>
+            {isRTL
+              ? 'صلاحيات كاملة لإدارة المشروع'
+              : 'Full access to manage the project'}
+          </p>
+        </div>
 
-      <div style={{ display: 'flex', gap: '0.75rem' }}>
+        {/* Toggle Switch */}
+        <div
+          onClick={toggleDeveloper}
+          style={{
+            width: 50,
+            height: 26,
+            borderRadius: 20,
+            background: isDeveloper ? '#0070F3' : '#334155',
+            position: 'relative',
+            cursor: 'pointer',
+            transition: 'all 0.25s'
+          }}
+        >
+          <div
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: '#fff',
+              position: 'absolute',
+              top: 2,
+              left: isDeveloper ? 26 : 2,
+              transition: 'all 0.25s'
+            }}
+          />
+        </div>
+      </label>
+      <div className={styles.permissionsScroll} style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}>
+        <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', flexWrap: 'nowrap', gap: '0.75rem' }}>
+          {AVAILABLE_PERMISSIONS.map(perm => (
+            <label
+              key={perm.key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                padding: '1rem',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                background: permissions.includes(perm.key) ? 'rgba(0, 112, 243, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                border: permissions.includes(perm.key) ? '1px solid rgba(0, 112, 243, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+                transition: 'all 0.2s'
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={permissions.includes(perm.key)}
+                onChange={() => togglePermission(perm.key)}
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  cursor: 'pointer',
+                  accentColor: '#0070F3'
+                }}
+              />
+              <div style={{ flex: 1 }}>
+                <p style={{ color: '#fff', fontWeight: '500', marginBottom: '0.25rem' }}>
+                  {isRTL ? perm.labelAr : perm.label}
+                </p>
+                <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                  {isRTL ? perm.descriptionAr : perm.description}
+                </p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem' }}>
         <button
-          onClick={() => onSave(permissions)}
+          onClick={() => onSave(permissions, isDeveloper)}
           disabled={isSubmitting}
           style={{
             flex: 1,
@@ -5484,7 +5932,7 @@ function PermissionsModalContent({
           {isRTL ? 'إلغاء' : 'Cancel'}
         </button>
       </div>
-    </div>
+    </>
   )
 }
 

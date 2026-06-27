@@ -14,6 +14,15 @@ export interface StatusChange {
   reason: string
 }
 
+export interface ProjectMediaItem {
+  id: string
+  type: 'image' | 'video'
+  url: string
+  thumbnail?: string
+  caption?: string
+  uploaded_at: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -29,6 +38,7 @@ export interface Project {
   start_date: string | null
   status_changes: StatusChange[]
   has_signed: boolean
+  media_updates?: ProjectMediaItem[]
   created_at: string
   updated_at: string
 }
@@ -94,6 +104,7 @@ export interface UpdateProjectPayload {
   has_signed?: boolean
   start_date?: string
   status_reason?: string
+  media_updates?: ProjectMediaItem[]
 }
 
 export interface GetProjectsParams {

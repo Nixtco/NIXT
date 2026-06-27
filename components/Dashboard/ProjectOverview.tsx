@@ -6,7 +6,8 @@ import styles from './Dashboard.module.css'
 import { useLanguage } from '@/hooks/useLanguage'
 import { useGlobalAuth } from '@/lib/auth-context'
 import { getMyProjects, getProjectById } from '@/app/Projects/apiFunctions'
-import type { Project as ProjectType, ProgressItem, StatusChange } from '@/app/Projects/apiFunctions'
+import type { Project as ProjectType, ProgressItem, StatusChange, ProjectMediaItem } from '@/app/Projects/apiFunctions'
+import { loadProjectMedia } from '@/lib/projectMediaStorage'
 
 // ── Read-only Progress Line Bar ──────────────────────────────────────────────
 function ReadOnlyProgressBar({
@@ -563,6 +564,425 @@ interface Milestone {
   isCompleted: boolean
 }
 
+const DEFAULT_PROJECT_MEDIA = (isRTL: boolean): ProjectMediaItem[] => [
+  {
+    id: 'demo-img-1',
+    type: 'image',
+    url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&q=80',
+    caption: isRTL ? 'مراجعة تصميم لوحة التحكم' : 'Dashboard wireframe review',
+    uploaded_at: '2025-03-10T10:00:00Z',
+  },
+  {
+    id: 'demo-vid-1',
+    type: 'video',
+    url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+    thumbnail: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&q=80',
+    caption: isRTL ? 'عرض تجريبي للصفحة الرئيسية' : 'Homepage prototype walkthrough',
+    uploaded_at: '2025-03-14T14:30:00Z',
+  },
+  {
+    id: 'demo-img-2',
+    type: 'image',
+    url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&q=80',
+    caption: isRTL ? 'تقدم ربط واجهة البرمجة' : 'Backend API integration progress',
+    uploaded_at: '2025-03-18T09:15:00Z',
+  },
+  {
+    id: 'demo-img-3',
+    type: 'image',
+    url: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=1200&q=80',
+    caption: isRTL ? 'تصميم متجاوب للجوال' : 'Mobile responsive layout',
+    uploaded_at: '2025-03-22T16:45:00Z',
+  },
+  {
+    id: 'demo-vid-2',
+    type: 'video',
+    url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4',
+    thumbnail: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&q=80',
+    caption: isRTL ? 'عرض تجريبي — وحدة الدفع' : 'User flow demo — checkout module',
+    uploaded_at: '2025-03-25T11:20:00Z',
+  },
+  {
+    id: 'demo-img-4',
+    type: 'image',
+    url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&q=80',
+    caption: isRTL ? 'لوحة التحليلات — آخر إصدار' : 'Analytics panel — latest build',
+    uploaded_at: '2025-03-28T13:00:00Z',
+  },
+]
+
+function getProjectMedia(project: ProjectType, isRTL: boolean): ProjectMediaItem[] {
+  const stored = loadProjectMedia(project.id, project.media_updates)
+  if (stored.length > 0) return stored
+  if (project.status === 'active') return DEFAULT_PROJECT_MEDIA(isRTL)
+  return []
+}
+
+function formatMediaDate(dateStr: string, isRTL: boolean): string {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function ProjectMediaGallery({
+  items,
+  isRTL,
+}: {
+  items: ProjectMediaItem[]
+  isRTL: boolean
+}) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  const isOpen = lightboxIndex !== null
+  const currentItem = isOpen ? items[lightboxIndex] : null
+
+  const goPrev = () => {
+    if (lightboxIndex === null) return
+    setLightboxIndex(lightboxIndex === 0 ? items.length - 1 : lightboxIndex - 1)
+  }
+
+  const goNext = () => {
+    if (lightboxIndex === null) return
+    setLightboxIndex(lightboxIndex === items.length - 1 ? 0 : lightboxIndex + 1)
+  }
+
+  const closeLightbox = () => setLightboxIndex(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxIndex(null)
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxIndex(prev => {
+          if (prev === null) return null
+          return isRTL
+            ? (prev === items.length - 1 ? 0 : prev + 1)
+            : (prev === 0 ? items.length - 1 : prev - 1)
+        })
+      } else if (e.key === 'ArrowRight') {
+        setLightboxIndex(prev => {
+          if (prev === null) return null
+          return isRTL
+            ? (prev === 0 ? items.length - 1 : prev - 1)
+            : (prev === items.length - 1 ? 0 : prev + 1)
+        })
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, isRTL, items.length])
+
+  useEffect(() => {
+    if (currentItem?.type === 'video' && videoRef.current) {
+      videoRef.current.load()
+      videoRef.current.play().catch(() => {})
+    }
+  }, [currentItem?.id, currentItem?.type])
+
+  if (items.length === 0) return null
+
+  return (
+    <>
+      <div style={{
+        marginTop: '16px',
+        marginBottom: '16px',
+        padding: '0.75rem 1rem',
+        background: 'rgba(255,255,255,0.02)',
+        borderRadius: '10px',
+        border: '1px solid rgba(255,255,255,0.05)',
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '10px',
+          flexDirection: isRTL ? 'row-reverse' : 'row',
+        }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-dim)' }}>
+            {isRTL ? '📸 آخر التطورات البصرية' : '📸 Visual Progress Updates'}
+          </span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', opacity: 0.7 }}>
+            {items.length} {isRTL ? 'ملف' : 'items'}
+          </span>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          gap: '6px',
+          flexDirection: isRTL ? 'row-reverse' : 'row',
+          overflowX: 'auto',
+          paddingBottom: '4px',
+          scrollbarWidth: 'thin',
+          flexWrap: 'wrap',
+        }}>
+          {items.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setLightboxIndex(index)}
+              aria-label={item.caption || (item.type === 'video' ? 'Video' : 'Image')}
+              style={{
+                position: 'relative',
+                flexShrink: 0,
+                width: '52px',
+                height: '52px',
+                padding: 0,
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                background: 'rgba(0,0,0,0.3)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(0,112,243,0.5)'
+                e.currentTarget.style.transform = 'scale(1.06)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,112,243,0.25)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+                e.currentTarget.style.transform = 'scale(1)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            >
+              {item.type === 'image' ? (
+                <img
+                  src={item.url}
+                  alt={item.caption || ''}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <>
+                  <img
+                    src={item.thumbnail || item.url}
+                    alt={item.caption || ''}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.45)',
+                  }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="#0070F3">
+                        <polygon points="2,1 7,4 2,7" />
+                      </svg>
+                    </div>
+                  </div>
+                </>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <p style={{
+          margin: '8px 0 0',
+          fontSize: '0.68rem',
+          color: 'var(--text-dim)',
+          opacity: 0.65,
+          textAlign: isRTL ? 'right' : 'left',
+        }}>
+          {isRTL
+            ? 'اضغط على أي صورة أو فيديو لعرضها بحجم كامل'
+            : 'Click any thumbnail to view full size'}
+        </p>
+      </div>
+
+      {isOpen && currentItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={isRTL ? 'عرض الوسائط' : 'Media viewer'}
+          onClick={closeLightbox}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.88)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <button
+            type="button"
+            onClick={closeLightbox}
+            aria-label={isRTL ? 'إغلاق' : 'Close'}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: isRTL ? 'auto' : '20px',
+              left: isRTL ? '20px' : 'auto',
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.08)',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s ease',
+              zIndex: 10,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); goPrev() }}
+            aria-label={isRTL ? 'السابق' : 'Previous'}
+            style={{
+              position: 'absolute',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              left: isRTL ? 'auto' : '16px',
+              right: isRTL ? '16px' : 'auto',
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.06)',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+              zIndex: 10,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,112,243,0.35)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points={isRTL ? '9 18 15 12 9 6' : '15 18 9 12 15 6'} />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); goNext() }}
+            aria-label={isRTL ? 'التالي' : 'Next'}
+            style={{
+              position: 'absolute',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              right: isRTL ? 'auto' : '16px',
+              left: isRTL ? '16px' : 'auto',
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.06)',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+              zIndex: 10,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,112,243,0.35)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points={isRTL ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
+            </svg>
+          </button>
+
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: 'min(900px, 92vw)',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            {currentItem.type === 'image' ? (
+              <img
+                src={currentItem.url}
+                alt={currentItem.caption || ''}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '72vh',
+                  borderRadius: '12px',
+                  objectFit: 'contain',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                }}
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                src={currentItem.url}
+                controls
+                playsInline
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '72vh',
+                  borderRadius: '12px',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                  background: '#000',
+                }}
+              />
+            )}
+
+            <div style={{
+              textAlign: 'center',
+              color: '#fff',
+              maxWidth: '600px',
+            }}>
+              {currentItem.caption && (
+                <p style={{ margin: '0 0 4px', fontSize: '0.95rem', fontWeight: 500 }}>
+                  {currentItem.caption}
+                </p>
+              )}
+              <p style={{ margin: 0, fontSize: '0.78rem', opacity: 0.6 }}>
+                {formatMediaDate(currentItem.uploaded_at, isRTL)}
+                {' · '}
+                {(lightboxIndex ?? 0) + 1} / {items.length}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 const ProjectOverview: FC<{ projectId?: string }> = ({ projectId }) => {
   const { t, language } = useLanguage()
   const { user } = useGlobalAuth()
@@ -781,6 +1201,7 @@ const ProjectOverview: FC<{ projectId?: string }> = ({ projectId }) => {
           console.log('📊😶‍🌫️😶‍🌫️😶‍🌫️😶‍🌫️ Rendering project:', project)
           const overallProgress = calculateOverallProgress(project.progress || [])
           const milestones = getMilestones(project)
+          const projectMedia = getProjectMedia(project, isRTL)
           
           return (
             <div key={project.id} className={styles.projectCard} style={{ marginBottom: '20px' }}>
@@ -888,6 +1309,11 @@ const ProjectOverview: FC<{ projectId?: string }> = ({ projectId }) => {
                     isRTL={isRTL}
                   />
                 </div>
+              )}
+
+              {/* Visual progress updates — images & videos from admin */}
+              {projectMedia.length > 0 && (
+                <ProjectMediaGallery items={projectMedia} isRTL={isRTL} />
               )}
 
               <div className={styles.projectStats} style={{ direction: isRTL ? 'rtl' : 'ltr' }}>

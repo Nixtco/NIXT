@@ -18,6 +18,10 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
             console.info('ℹ️ See GOOGLE_OAUTH_SETUP.md for setup instructions.');
         } else {
             console.log('✅ Google OAuth is configured');
+            if (typeof window !== 'undefined') {
+                console.log('🌐 Google OAuth origin:', window.location.origin);
+                console.log('🆔 Google OAuth client ID:', GOOGLE_CLIENT_ID);
+            }
         }
     }, []);
 

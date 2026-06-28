@@ -33,7 +33,7 @@ interface MessageAttachment {
 }
 
 interface Message {
-  id: number
+  id: string | number
   text: string
   sender: 'sent' | 'received'
   time: string
@@ -50,6 +50,7 @@ interface ChatItem {
   subtitle?: string
   projectId?: string
   clientId?: string
+  otherUserId?: string
   clientName?: string
   clientEmail?: string
 }
@@ -207,55 +208,75 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
 
   const chats = useMemo<ChatItem[]>(() => {
     if (isAdminMode) {
-      const items: ChatItem[] = []
+      const items: ChatItem[] = conversations.map((conv) => {
+        const clientName = conv.client?.display_name
+          || `${conv.client?.first_name || ''} ${conv.client?.last_name || ''}`.trim()
+          || conv.client?.email
+          || (language === 'ar' ? 'عميل' : 'Client')
 
-      for (const client of adminClients) {
-        const clientName = getClientDisplayName(client)
-        items.push({
-          id: buildAdminChatId(client.id, 'general'),
-          type: 'general',
-          name: clientName,
-          subtitle: language === 'ar' ? 'استفسار عام' : 'General Inquiry',
-          clientId: client.id,
+        const statusSubtitle = conv.type === 'project'
+          ? (conv.project?.name || (language === 'ar' ? 'محادثة مشروع' : 'Project Conversation'))
+          : (language === 'ar' ? 'استفسار عام' : 'General Inquiry')
+
+        return {
+          id: conv.id,
+          type: conv.type,
+          name: conv.type === 'project' ? (conv.project?.name || statusSubtitle) : clientName,
+          subtitle: statusSubtitle,
+          projectId: conv.project_id || undefined,
+          clientId: conv.client_id,
           clientName,
-          clientEmail: client.email,
-        })
-
-        for (const project of projects.filter((p) => p.user_id === client.id)) {
-          items.push({
-            id: buildAdminChatId(client.id, 'project', project.id),
-            type: 'project',
-            name: project.name,
-            subtitle: getStatusLabel(project.status, language),
-            projectId: project.id,
-            clientId: client.id,
-            clientName,
-            clientEmail: client.email,
-          })
+          clientEmail: conv.client?.email || undefined,
         }
-      }
+      })
 
       return items.sort((a, b) => (unreadCounts[b.id] ?? 0) - (unreadCounts[a.id] ?? 0))
     }
 
-    const projectChats: ChatItem[] = projects.map((project) => ({
-      id: project.id,
-      type: 'project',
-      name: project.name,
-      subtitle: getStatusLabel(project.status, language),
-      projectId: project.id,
-    }))
+    const existingGeneral = conversations.find((c) => c.type === 'general')
+    const existingProjectMap = new Map(conversations.filter((c) => c.type === 'project' && c.project_id).map((c) => [c.project_id as string, c]))
 
-    return [
-      {
-        id: GENERAL_CHAT_ID,
-        type: 'general',
-        name: generalChatName,
-        subtitle: generalChatSubtitle,
-      },
-      ...projectChats,
-    ]
-  }, [isAdminMode, adminClients, projects, language, generalChatName, generalChatSubtitle, unreadCounts])
+    const projectChats: ChatItem[] = projects.map((project) => {
+      const existing = existingProjectMap.get(project.id)
+      if (existing) {
+        return {
+          id: existing.id,
+          type: 'project',
+          name: project.name,
+          subtitle: getStatusLabel(project.status, language),
+          projectId: project.id,
+          otherUserId: existing.admin_id,
+        }
+      }
+
+      return {
+        id: `project-${project.id}`,
+        type: 'project',
+        name: project.name,
+        subtitle: getStatusLabel(project.status, language),
+        projectId: project.id,
+        otherUserId: project.team?.[0],
+      }
+    })
+
+    const generalChat: ChatItem = existingGeneral
+      ? {
+          id: existingGeneral.id,
+          type: 'general',
+          name: generalChatName,
+          subtitle: generalChatSubtitle,
+          otherUserId: existingGeneral.admin_id,
+        }
+      : {
+          id: GENERAL_CHAT_ID,
+          type: 'general',
+          name: generalChatName,
+          subtitle: generalChatSubtitle,
+          otherUserId: projects.find((p) => (p.team?.length || 0) > 0)?.team?.[0],
+        }
+
+    return [generalChat, ...projectChats]
+  }, [isAdminMode, conversations, projects, language, generalChatName, generalChatSubtitle, unreadCounts])
 
   const visibleChats = useMemo(() => {
     let list = chats
@@ -339,11 +360,24 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               unreadMap[conv.id] = conv.unread_count
             })
             setUnreadCounts(unreadMap)
+            if (res.data.length > 0) {
+              setActiveChatId((prev) => prev === GENERAL_CHAT_ID ? res.data[0].id : prev)
+              setActiveConversationId((prev) => prev || res.data[0].id)
+            }
           }
         } else {
           const res = await getClientConversations({ limit: 100, offset: 0 })
           if (res.success && res.data) {
             setConversations(res.data)
+            const unreadMap: Record<string, number> = {}
+            res.data.forEach(conv => {
+              unreadMap[conv.id] = conv.unread_count
+            })
+            setUnreadCounts(unreadMap)
+            if (res.data.length > 0) {
+              setActiveChatId((prev) => prev === GENERAL_CHAT_ID ? res.data[0].id : prev)
+              setActiveConversationId((prev) => prev || res.data[0].id)
+            }
           }
         }
       } catch (err) {
@@ -369,19 +403,18 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
         if (res.success && res.data) {
           // تحويل رسائل API إلى صيغة الـ UI
           const convertedMessages: Message[] = res.data.map(msg => ({
-            id: msg.id.charCodeAt(0), // استخدم الأحرف الأولى من ID كـ number مؤقتاً
+            id: msg.id,
             text: msg.text,
-            sender: msg.sender_type === 'admin' ? 'sent' : 'received',
+            sender: isAdminMode
+              ? (msg.sender_type === 'admin' ? 'sent' : 'received')
+              : (msg.sender_type === 'client' ? 'sent' : 'received'),
             time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             senderName: msg.sender?.display_name || msg.sender?.email,
             attachment: msg.attachment || undefined
           }))
           setChatMessages(prev => ({ ...prev, [activeConversationId]: convertedMessages }))
           
-          // تحديد الرسائل كمقروءة للمدير
-          if (isAdminMode) {
-            await markConversationAsRead(activeConversationId)
-          }
+          await markConversationAsRead(activeConversationId)
         }
       } catch (err) {
         console.error('Failed to load messages:', err)
@@ -514,8 +547,6 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     }).then(() => {
       if (isAdminMode) {
         setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
-      } else {
-        pushAutoReply(chatId, !!attachment)
       }
     }).catch((err) => {
       console.error('Failed to send message:', err)
@@ -523,54 +554,41 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     }).finally(() => {
       setIsSubmitting(false)
     })
-  }, [activeChatId, language, pushAutoReply, isAdminMode, activeConversationId])
+  }, [activeChatId, language, isAdminMode, activeConversationId])
 
   const handleSelectChat = async (chatId: string) => {
     setActiveChatId(chatId)
     if (isAdminMode) {
       setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
+      setActiveConversationId(chatId)
+      return
     }
 
-    // Determine or create the backend conversation id for this chat
+    const existing = conversations.find((c) => c.id === chatId)
+    if (existing) {
+      setActiveConversationId(existing.id)
+      return
+    }
+
+    // user mode: create conversation for placeholders (general/project)
     try {
       const chatItem = chats.find(c => c.id === chatId)
-      if (!chatItem) {
+      if (!chatItem?.otherUserId) {
         setActiveConversationId(null)
         return
       }
 
-      // Try to find an existing conversation from loaded conversations
-      const existing = conversations.find(conv => {
-        if (!conv) return false
-        // match by client + type + optional project
-        if (conv.client_id !== chatItem.clientId) return false
-        if (conv.type !== chatItem.type) return false
-        if ((conv.project_id || null) !== (chatItem.projectId || null)) return false
-        return true
+      const convRes = await getOrCreateConversation({
+        other_user_id: chatItem.otherUserId,
+        type: chatItem.type,
+        project_id: chatItem.projectId
       })
-
-      if (existing) {
-        setActiveConversationId(existing.id)
-        return
+      if (convRes && convRes.success && convRes.data) {
+        setActiveConversationId(convRes.data.id)
+        setConversations(prev => (convRes.data ? [...prev.filter(c => c.id !== convRes.data!.id), convRes.data!] : prev))
+      } else {
+        setActiveConversationId(null)
       }
-
-      // If not found, request creation (backend will return or create)
-      if (chatItem.clientId) {
-        const convRes = await getOrCreateConversation({
-          other_user_id: chatItem.clientId,
-          type: chatItem.type,
-          project_id: chatItem.projectId
-        })
-        if (convRes && convRes.success && convRes.data) {
-          setActiveConversationId(convRes.data.id)
-          // add to conversations list locally
-          setConversations(prev => (convRes.data ? [...prev.filter(c=>c.id!==convRes.data!.id), convRes.data!] : prev))
-          return
-        }
-      }
-
-      // Fallback: clear active conversation id
-      setActiveConversationId(null)
     } catch (err) {
       console.error('Failed to select chat / get conversation:', err)
       setActiveConversationId(null)

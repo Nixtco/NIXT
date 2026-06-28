@@ -1,6 +1,6 @@
 'use client'
 
-import { FC, useState, useEffect, useRef } from 'react'
+import { FC, useState, useEffect, useRef, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './Dashboard.module.css'
 import { useLanguage } from '@/hooks/useLanguage'
@@ -62,7 +62,7 @@ function ReadOnlyProgressBar({
   const completedCircleSize = isCompact ? 24 : 30
   const incompleteCircleSize = isCompact ? 12 : 15
 
-  const getLabelStyle = (isVisible: boolean, isCompleted: boolean, completedColor: string, extraBackground: string, extraBorder: string, extraColor: string) => ({
+  const getLabelStyle = (isVisible: boolean, isCompleted: boolean, completedColor: string, extraBackground: string, extraBorder: string, extraColor: string): CSSProperties => ({
     display: 'inline-block',
     fontSize: labelFontSize,
     fontWeight: 600,
@@ -79,7 +79,7 @@ function ReadOnlyProgressBar({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     transition: 'opacity 0.25s ease, transform 0.25s ease, max-height 0.25s ease, background 0.25s ease, border-color 0.25s ease, color 0.25s ease',
-    pointerEvents: 'none',
+    pointerEvents: 'none' as const,
     boxShadow: isVisible && isCompleted ? `0 0 10px ${completedColor}22` : 'none',
   })
 

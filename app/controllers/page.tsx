@@ -146,6 +146,41 @@ interface Activity {
   detailsEn: string
 }
 
+interface ActivityLogApiItem {
+  id: string
+  user_id: string
+  page: string
+  duration: number
+  created_at: string
+  user?: {
+    id: string
+    email: string
+    display_name?: string | null
+    first_name?: string | null
+    last_name?: string | null
+  } | null
+}
+
+interface PendingActivityLog {
+  page: string
+  duration: number
+  createdAt: string
+}
+
+const ACTIVITY_QUEUE_KEY = 'nixt_activity_logs_queue_v1'
+const ACTIVITY_LAST_FLUSH_KEY = 'nixt_activity_logs_last_flush_at_v1'
+const ACTIVITY_FLUSH_INTERVAL_KEY = 'nixt_activity_logs_flush_interval_ms_v1'
+const DEFAULT_ACTIVITY_FLUSH_INTERVAL_MS = 6 * 60 * 60 * 1000
+const ACTIVITY_FLUSH_INTERVAL_OPTIONS = [
+  { ms: 15 * 60 * 1000, labelAr: '15 دقيقة', labelEn: '15 min' },
+  { ms: 30 * 60 * 1000, labelAr: '30 دقيقة', labelEn: '30 min' },
+  { ms: 60 * 60 * 1000, labelAr: 'ساعة', labelEn: '1 hour' },
+  { ms: 3 * 60 * 60 * 1000, labelAr: '3 ساعات', labelEn: '3 hours' },
+  { ms: 6 * 60 * 60 * 1000, labelAr: '6 ساعات', labelEn: '6 hours' },
+  { ms: 12 * 60 * 60 * 1000, labelAr: '12 ساعة', labelEn: '12 hours' },
+  { ms: 24 * 60 * 60 * 1000, labelAr: '24 ساعة', labelEn: '24 hours' },
+]
+
 function ControllersContent() {
   const router = useRouter()
   const { t, language, setLanguage, dir } = useLanguage()
@@ -335,7 +370,7 @@ function ControllersContent() {
     },
   ]
 
-  const activities: Activity[] = [
+  const fallbackActivities: Activity[] = [
     {
       id: '1',
       user: 'أحمد محمد',
@@ -365,8 +400,174 @@ function ControllersContent() {
     },
   ]
 
+  const [activities, setActivities] = useState<Activity[]>(fallbackActivities)
+  const [activitiesLoading, setActivitiesLoading] = useState(false)
+  const [activityFlushIntervalMs, setActivityFlushIntervalMs] = useState(DEFAULT_ACTIVITY_FLUSH_INTERVAL_MS)
+
   // ==================== API Configuration ====================
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
+
+  const enqueueActivityLog = useCallback((page: string, duration = 0) => {
+    if (!user?.id) return
+    try {
+      const raw = localStorage.getItem(ACTIVITY_QUEUE_KEY)
+      const queue: PendingActivityLog[] = raw ? JSON.parse(raw) : []
+      queue.push({ page, duration, createdAt: new Date().toISOString() })
+      localStorage.setItem(ACTIVITY_QUEUE_KEY, JSON.stringify(queue))
+    } catch {
+      // Do not block UI for logging failures
+    }
+  }, [user?.id])
+
+  const flushActivityLogsQueue = useCallback(async (force = false) => {
+    if (!token || !user?.id) return
+
+    const now = Date.now()
+    const lastFlushAt = Number(localStorage.getItem(ACTIVITY_LAST_FLUSH_KEY) || '0')
+    if (!force && now - lastFlushAt < activityFlushIntervalMs) return
+
+    let queue: PendingActivityLog[] = []
+    try {
+      queue = JSON.parse(localStorage.getItem(ACTIVITY_QUEUE_KEY) || '[]') as PendingActivityLog[]
+    } catch {
+      queue = []
+    }
+
+    if (!Array.isArray(queue) || queue.length === 0) {
+      localStorage.setItem(ACTIVITY_LAST_FLUSH_KEY, String(now))
+      return
+    }
+
+    const remaining: PendingActivityLog[] = []
+    for (const item of queue) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/activity-logs`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            duration: item.duration,
+            page: item.page,
+          }),
+        })
+
+        if (!response.ok) {
+          remaining.push(item)
+        }
+      } catch {
+        remaining.push(item)
+      }
+    }
+
+    localStorage.setItem(ACTIVITY_QUEUE_KEY, JSON.stringify(remaining))
+    localStorage.setItem(ACTIVITY_LAST_FLUSH_KEY, String(Date.now()))
+  }, [API_BASE_URL, token, user?.id, activityFlushIntervalMs])
+
+  const activityFlushIntervalLabel = useMemo(() => {
+    const option = ACTIVITY_FLUSH_INTERVAL_OPTIONS.find(item => item.ms === activityFlushIntervalMs)
+    if (!option) return isRTL ? '6 ساعات' : '6 hours'
+    return isRTL ? option.labelAr : option.labelEn
+  }, [activityFlushIntervalMs, isRTL])
+
+  const cycleActivityFlushInterval = useCallback(() => {
+    const currentIndex = ACTIVITY_FLUSH_INTERVAL_OPTIONS.findIndex(item => item.ms === activityFlushIntervalMs)
+    const nextIndex = currentIndex === -1
+      ? ACTIVITY_FLUSH_INTERVAL_OPTIONS.findIndex(item => item.ms === DEFAULT_ACTIVITY_FLUSH_INTERVAL_MS)
+      : (currentIndex + 1) % ACTIVITY_FLUSH_INTERVAL_OPTIONS.length
+    const nextMs = ACTIVITY_FLUSH_INTERVAL_OPTIONS[nextIndex].ms
+    setActivityFlushIntervalMs(nextMs)
+    localStorage.setItem(ACTIVITY_FLUSH_INTERVAL_KEY, String(nextMs))
+  }, [activityFlushIntervalMs])
+
+  const mapActivityLogToOverviewItem = useCallback((log: ActivityLogApiItem): Activity => {
+    const userName =
+      log.user?.display_name
+      || `${log.user?.first_name || ''} ${log.user?.last_name || ''}`.trim()
+      || log.user?.email
+      || (isRTL ? `مستخدم #${log.user_id.slice(0, 8)}` : `User #${log.user_id.slice(0, 8)}`)
+
+    const pageLabel = log.page || (isRTL ? 'غير معروف' : 'Unknown')
+    const durationLabelAr = `${Math.max(0, log.duration || 0)} ثانية`
+    const durationLabelEn = `${Math.max(0, log.duration || 0)} sec`
+
+    let action = 'زار صفحة'
+    let actionEn = 'Visited page'
+    let details = `${pageLabel} - ${durationLabelAr}`
+    let detailsEn = `${pageLabel} - ${durationLabelEn}`
+
+    if (pageLabel.startsWith('controllers/client/add')) {
+      action = 'أضاف عميل جديد'
+      actionEn = 'Added new client'
+      details = isRTL ? 'من لوحة العملاء' : 'From clients section'
+      detailsEn = 'From clients section'
+    } else if (pageLabel.startsWith('controllers/project/update')) {
+      const projectId = pageLabel.split(':')[1] || '-'
+      action = 'حدّث مشروع'
+      actionEn = 'Updated project'
+      details = `${isRTL ? 'المشروع' : 'Project'} #${projectId}`
+      detailsEn = `Project #${projectId}`
+    } else if (pageLabel.startsWith('controllers/project/delete')) {
+      const projectId = pageLabel.split(':')[1] || '-'
+      action = 'حذف مشروع'
+      actionEn = 'Deleted project'
+      details = `${isRTL ? 'المشروع' : 'Project'} #${projectId}`
+      detailsEn = `Project #${projectId}`
+    } else if (pageLabel.startsWith('controllers/contract/update')) {
+      const contractId = pageLabel.split(':')[1] || '-'
+      action = 'حدّث عقد'
+      actionEn = 'Updated contract'
+      details = `${isRTL ? 'العقد' : 'Contract'} #${contractId}`
+      detailsEn = `Contract #${contractId}`
+    }
+
+    return {
+      id: log.id,
+      user: userName,
+      action,
+      actionEn,
+      time: log.created_at,
+      details,
+      detailsEn,
+    }
+  }, [isRTL])
+
+  const fetchRecentActivities = useCallback(async () => {
+    if (!token) return
+
+    setActivitiesLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/activity-logs?limit=8&offset=0`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch activity logs: ${response.status}`)
+      }
+
+      const result = await response.json() as { success?: boolean; data?: ActivityLogApiItem[] }
+      const logs = Array.isArray(result?.data) ? result.data : []
+
+      if (logs.length > 0) {
+        setActivities(logs.map(mapActivityLogToOverviewItem))
+      } else {
+        setActivities([])
+      }
+    } catch {
+      setActivities(fallbackActivities)
+    } finally {
+      setActivitiesLoading(false)
+    }
+  }, [API_BASE_URL, token, mapActivityLogToOverviewItem])
+
+  const trackOverviewVisit = useCallback(() => {
+    enqueueActivityLog('controllers/overview/open', 0)
+  }, [enqueueActivityLog])
 
   const loadFinanceTransactions = useCallback(() => {
     setTransactionsLoading(true)
@@ -386,6 +587,38 @@ function ControllersContent() {
   useEffect(() => {
     loadFinanceTransactions()
   }, [loadFinanceTransactions])
+
+  useEffect(() => {
+    if (!isAuthenticated || !token || !isAdmin) return
+    if (activeTab !== 'overview') return
+
+    trackOverviewVisit()
+    fetchRecentActivities()
+  }, [activeTab, fetchRecentActivities, isAdmin, isAuthenticated, token, trackOverviewVisit])
+
+  useEffect(() => {
+    if (!isAuthenticated || !isAdmin || !token || !user?.id) return
+
+    flushActivityLogsQueue()
+    const intervalId = window.setInterval(() => {
+      flushActivityLogsQueue()
+    }, activityFlushIntervalMs)
+
+    return () => window.clearInterval(intervalId)
+  }, [flushActivityLogsQueue, isAdmin, isAuthenticated, token, user?.id, activityFlushIntervalMs])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ACTIVITY_FLUSH_INTERVAL_KEY)
+      if (!raw) return
+      const parsed = Number(raw)
+      if (!Number.isFinite(parsed)) return
+      if (!ACTIVITY_FLUSH_INTERVAL_OPTIONS.some(item => item.ms === parsed)) return
+      setActivityFlushIntervalMs(parsed)
+    } catch {
+      // keep default interval
+    }
+  }, [])
 
   const getAdminDisplayName = useCallback((admin: ProjectAdmin) => {
     const u = admin.user
@@ -926,6 +1159,7 @@ function ControllersContent() {
       if (Object.keys(payload).length > 0) {
         const res = await apiUpdateProject(projectId, payload)
         if (res.success) {
+          enqueueActivityLog(`controllers/project/update:${projectId}`, 0)
           showProjectSuccess(isRTL ? 'تم حفظ التغييرات بنجاح' : 'Changes saved successfully')
           await refreshProjectData()
           
@@ -1007,6 +1241,7 @@ function ControllersContent() {
 
       const res = await apiUpdateProject(editingProject.id, payload)
       if (res.success) {
+        enqueueActivityLog(`controllers/project/update:${editingProject.id}`, 0)
         showProjectSuccess(isRTL ? 'تم تحديث المشروع بنجاح' : 'Project updated successfully')
         const projectId = editingProject.id
         setEditingProject(null)
@@ -1101,6 +1336,7 @@ function ControllersContent() {
       setProjectActionLoading(true)
       const res = await apiDeleteProject(id)
       if (res.success) {
+        enqueueActivityLog(`controllers/project/delete:${id}`, 0)
         showProjectSuccess(isRTL ? 'تم حذف المشروع بنجاح' : 'Project deleted successfully')
         await refreshProjectData()
       }
@@ -1432,6 +1668,7 @@ function ControllersContent() {
 
       const res = await updateContract(contractData.id, payload)
       if (res.success) {
+        enqueueActivityLog(`controllers/contract/update:${contractData.id}`, 0)
         showContractSuccessMsg(isRTL ? 'تم تحديث العقد بنجاح' : 'Contract updated successfully')
         // Refresh contract data
         const updated = await getContractsByProjectId(contractDialogProject.id)
@@ -1743,6 +1980,24 @@ function ControllersContent() {
     }
   }, [clients, projects, transactions, projectStats])
 
+  const overviewStats = useMemo(() => {
+    const projectCompletionRate = stats.totalProjects > 0
+      ? Math.round((stats.completedProjects / stats.totalProjects) * 100)
+      : 0
+    const activeClientRate = stats.totalClients > 0
+      ? Math.round((stats.activeClients / stats.totalClients) * 100)
+      : 0
+    const netMargin = stats.totalRevenue > 0
+      ? Math.round((stats.netProfit / stats.totalRevenue) * 100)
+      : 0
+
+    return {
+      projectCompletionRate,
+      activeClientRate,
+      netMargin,
+    }
+  }, [stats])
+
   // Filter clients based on search
   const filteredClients = useMemo(() => {
     if (!searchTerm) return clients
@@ -2038,113 +2293,168 @@ function ControllersContent() {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className={styles.overview}>
-            {/* Statistics Cards */}
-            <div className={styles.statsGrid}>
-              <div className={styles.statCard}>
-                <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #0070F3, #00C781)' }}>
-                  <UsersIcon size={28} />
-                </div>
-                <div className={styles.statInfo}>
-                  <h3>{stats.totalClients}</h3>
-                  <p>{t.controllers.clients.total}</p>
-                  <span className={styles.statChange}>
-                    +{stats.activeClients} {t.controllers.clients.active}
-                  </span>
+            <div className={styles.overviewHero}>
+              <div>
+                <h2 className={styles.overviewHeroTitle}>{isRTL ? 'لوحة متابعة يومية' : 'Daily Operations Snapshot'}</h2>
+                <p className={styles.overviewHeroText}>
+                  {isRTL
+                    ? 'ملخص هادئ وواضح لأهم مؤشرات العملاء، المشاريع، والمالية مع اختصارات تنفيذ سريعة.'
+                    : 'A calm and focused summary of clients, projects, and finance with practical shortcuts.'}
+                </p>
+              </div>
+              <div className={styles.overviewHeroMeta}>
+                <span>{isRTL ? 'آخر تحديث' : 'Last update'}</span>
+                <strong>
+                  {new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </strong>
+              </div>
+            </div>
+
+            <div className={styles.overviewMetricsGrid}>
+              <div className={styles.overviewMetricCard}>
+                <div className={styles.overviewMetricIcon}><UsersIcon size={22} /></div>
+                <div>
+                  <p className={styles.overviewMetricLabel}>{t.controllers.clients.total}</p>
+                  <h3 className={styles.overviewMetricValue}>{stats.totalClients}</h3>
+                  <span className={styles.overviewMetricNote}>{stats.activeClients} {t.controllers.clients.active}</span>
                 </div>
               </div>
 
-              <div className={styles.statCard}>
-                <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #00C781, #0070F3)' }}>
-                  <BarChartIcon size={28} />
-                </div>
-                <div className={styles.statInfo}>
-                  <h3>{stats.totalProjects}</h3>
-                  <p>{t.controllers.projects.total}</p>
-                  <span className={styles.statChange}>
-                    {stats.activeProjects} {t.controllers.projects.active}
-                  </span>
+              <div className={styles.overviewMetricCard}>
+                <div className={styles.overviewMetricIcon}><BarChartIcon size={22} /></div>
+                <div>
+                  <p className={styles.overviewMetricLabel}>{t.controllers.projects.total}</p>
+                  <h3 className={styles.overviewMetricValue}>{stats.totalProjects}</h3>
+                  <span className={styles.overviewMetricNote}>{stats.completedProjects} {isRTL ? 'مكتمل' : 'Completed'}</span>
                 </div>
               </div>
 
-              <div className={styles.statCard}>
-                <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #FF8C00, #FF0080)' }}>
-                  <WalletIcon size={28} />
-                </div>
-                <div className={styles.statInfo}>
-                  <h3>{formatCurrency(stats.totalRevenue)}</h3>
-                  <p>{t.controllers.finances.totalRevenue}</p>
-                  <span className={styles.statChange}>
-                    {formatCurrency(stats.pendingRevenue)} {t.controllers.finances.pending}
-                  </span>
+              <div className={styles.overviewMetricCard}>
+                <div className={styles.overviewMetricIcon}><WalletIcon size={22} /></div>
+                <div>
+                  <p className={styles.overviewMetricLabel}>{t.controllers.finances.totalRevenue}</p>
+                  <h3 className={styles.overviewMetricValue}>{formatCurrency(stats.totalRevenue)}</h3>
+                  <span className={styles.overviewMetricNote}>{formatCurrency(stats.pendingRevenue)} {t.controllers.finances.pending}</span>
                 </div>
               </div>
 
-              <div className={styles.statCard}>
-                <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #9B59B6, #7042F8)' }}>
-                  <TrendingUpIcon size={28} />
-                </div>
-                <div className={styles.statInfo}>
-                  <h3>{formatCurrency(stats.netProfit)}</h3>
-                  <p>{t.controllers.finances.profit}</p>
-                  <span className={styles.statChange}>
-                    ↑ 12.5%
-                  </span>
+              <div className={styles.overviewMetricCard}>
+                <div className={styles.overviewMetricIcon}><TrendingUpIcon size={22} /></div>
+                <div>
+                  <p className={styles.overviewMetricLabel}>{t.controllers.finances.profit}</p>
+                  <h3 className={styles.overviewMetricValue}>{formatCurrency(stats.netProfit)}</h3>
+                  <span className={styles.overviewMetricNote}>{overviewStats.netMargin}% {isRTL ? 'هامش الربح' : 'Margin'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>{t.controllers.quickActions.title}</h2>
-              <div className={styles.quickActions}>
-                <button className={styles.actionBtn}>
-                  <span className={styles.actionIcon}>
-                    <UserPlusIcon size={40} />
-                  </span>
-                  <span>{t.controllers.quickActions.addClient}</span>
-                </button>
-                <button className={styles.actionBtn}>
-                  <span className={styles.actionIcon}>
-                    <FolderPlusIcon size={40} />
-                  </span>
-                  <span>{t.controllers.quickActions.createProject}</span>
-                </button>
-                <button className={styles.actionBtn}>
-                  <span className={styles.actionIcon}>
-                    <FileTextIcon size={40} />
-                  </span>
-                  <span>{t.controllers.quickActions.sendInvoice}</span>
-                </button>
-                <button className={styles.actionBtn}>
-                  <span className={styles.actionIcon}>
-                    <SaveIcon size={40} />
-                  </span>
-                  <span>{t.controllers.quickActions.backupData}</span>
-                </button>
+            <div className={styles.overviewUtilityGrid}>
+              <div className={styles.overviewUtilityCard}>
+                <div className={styles.overviewUtilityHead}>
+                  <span>{isRTL ? 'تقدم المشاريع' : 'Project Completion'}</span>
+                  <strong>{overviewStats.projectCompletionRate}%</strong>
+                </div>
+                <div className={styles.overviewProgressTrack}>
+                  <span style={{ width: `${overviewStats.projectCompletionRate}%` }} />
+                </div>
+              </div>
 
+              <div className={styles.overviewUtilityCard}>
+                <div className={styles.overviewUtilityHead}>
+                  <span>{isRTL ? 'نشاط العملاء' : 'Client Activity'}</span>
+                  <strong>{overviewStats.activeClientRate}%</strong>
+                </div>
+                <div className={styles.overviewProgressTrack}>
+                  <span style={{ width: `${overviewStats.activeClientRate}%` }} />
+                </div>
+              </div>
+
+              <div className={styles.overviewUtilityCard}>
+                <div className={styles.overviewUtilityHead}>
+                  <span>{isRTL ? 'صافي التدفق' : 'Net Cash Flow'}</span>
+                  <strong style={{ color: stats.netProfit >= 0 ? '#00c781' : '#ff8c8c' }}>{formatCurrency(stats.netProfit)}</strong>
+                </div>
+                <p className={styles.overviewUtilityText}>
+                  {isRTL
+                    ? `إجمالي المصروفات والسحوبات والإرجاعات: ${formatCurrency(stats.totalOutflow)}`
+                    : `Total expenses, withdrawals, and refunds: ${formatCurrency(stats.totalOutflow)}`}
+                </p>
               </div>
             </div>
 
-            {/* Recent Activity */}
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>{t.controllers.activity.recent}</h2>
+            <div className={styles.overviewActionBlock}>
+              <h3 className={styles.overviewBlockTitle}>{isRTL ? 'إجراءات سريعة مفيدة' : 'Useful Shortcuts'}</h3>
+              <div className={styles.overviewActions}>
+                <button className={styles.overviewActionBtn} onClick={() => setActiveTab('clients')}>
+                  <UserPlusIcon size={18} />
+                  {t.controllers.quickActions.addClient}
+                </button>
+                <button className={styles.overviewActionBtn} onClick={() => setActiveTab('projects')}>
+                  <FolderPlusIcon size={18} />
+                  {t.controllers.quickActions.createProject}
+                </button>
+                <button className={styles.overviewActionBtn} onClick={() => setActiveTab('finances')}>
+                  <FileTextIcon size={18} />
+                  {isRTL ? 'مراجعة المالية' : 'Review Finances'}
+                </button>
+                <button className={styles.overviewActionBtn} onClick={() => setActiveTab('chat')}>
+                  <SaveIcon size={18} />
+                  {isRTL ? 'فتح المحادثات' : 'Open Messages'}
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.overviewActivityBlock}>
+              <div className={styles.overviewBlockHeader}>
+                <h3 className={styles.overviewBlockTitle}>{t.controllers.activity.recent}</h3>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <button className={styles.secondaryBtn} onClick={cycleActivityFlushInterval}>
+                    {isRTL ? `تحديث المزامنة: ${activityFlushIntervalLabel}` : `Sync interval: ${activityFlushIntervalLabel}`}
+                  </button>
+                  <button className={styles.secondaryBtn} onClick={() => setActiveTab('analytics')}>
+                    {isRTL ? 'عرض التحليلات' : 'Open Analytics'}
+                  </button>
+                </div>
+              </div>
               <div className={styles.activityList}>
-                {activities.map(activity => (
-                  <div key={activity.id} className={styles.activityItem}>
-                    <div className={styles.activityIcon}>
-                      <PinIcon size={20} />
-                    </div>
+                {activitiesLoading ? (
+                  <div className={styles.activityItem}>
                     <div className={styles.activityContent}>
-                      <p className={styles.activityText}>
-                        <strong>{activity.user}</strong> {isRTL ? activity.action : activity.actionEn}
-                      </p>
                       <p className={styles.activityDetails}>
-                        {isRTL ? activity.details : activity.detailsEn}
+                        {isRTL ? 'جاري تحميل الأنشطة...' : 'Loading activities...'}
                       </p>
-                      <span className={styles.activityTime}>{formatDateTime(activity.time)}</span>
                     </div>
                   </div>
-                ))}
+                ) : activities.length === 0 ? (
+                  <div className={styles.activityItem}>
+                    <div className={styles.activityContent}>
+                      <p className={styles.activityDetails}>
+                        {isRTL ? 'لا توجد أنشطة حديثة حتى الآن.' : 'No recent activity yet.'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  activities.map(activity => (
+                    <div key={activity.id} className={styles.activityItem}>
+                      <div className={styles.activityIcon}>
+                        <PinIcon size={20} />
+                      </div>
+                      <div className={styles.activityContent}>
+                        <p className={styles.activityText}>
+                          <strong>{activity.user}</strong> {isRTL ? activity.action : activity.actionEn}
+                        </p>
+                        <p className={styles.activityDetails}>
+                          {isRTL ? activity.details : activity.detailsEn}
+                        </p>
+                        <span className={styles.activityTime}>{formatDateTime(activity.time)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -2290,6 +2600,7 @@ function ControllersContent() {
                           dashboardSections: ['project', 'analytics', 'financial', 'support'],
                           isActive: true,
                         })
+                        enqueueActivityLog('controllers/client/add', 0)
                         setNewClientEmail('')
                         setNewClientName('')
                         setNewClientPhone('')
@@ -3336,6 +3647,7 @@ function ControllersContent() {
                             const newStatus = checked ? 'completed' : 'active'
                             const res = await apiUpdateProject(projectId, { status: newStatus })
                             if (res.success) {
+                              enqueueActivityLog(`controllers/project/update:${projectId}`, 0)
                               showProjectSuccess(checked
                                 ? (isRTL ? '🏁 تم إنهاء المشروع بنجاح' : '🏁 Project marked as completed')
                                 : (isRTL ? 'تم إعادة تفعيل المشروع' : 'Project reactivated')

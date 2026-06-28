@@ -126,6 +126,22 @@
     position: relative;
     overflow: hidden;
   }
+
+  .tabIcon {
+    display: none;
+    line-height: 1;
+    color: currentColor;
+  }
+
+  .tabIcon svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+  }
+
+  .tabLabel {
+    display: inline;
+  }
   
   .tab:hover {
     color: #ffffff;
@@ -804,6 +820,87 @@
     color: #000;
     transform: scale(1.1);
   }
+
+  .clientFormCard {
+    background: rgba(112, 66, 248, 0.05);
+    border: 1px solid rgba(112, 66, 248, 0.15);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .clientFormTitle {
+    margin: 0 0 1.5rem 0;
+    color: #fff;
+    font-size: 1.2rem;
+  }
+
+  .clientFormGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .clientFieldLabel {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .clientFormActions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .clientModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+    padding: 2rem;
+  }
+
+  .clientModal {
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.98), rgba(31, 41, 55, 0.98));
+    border: 1px solid rgba(112, 66, 248, 0.3);
+    border-radius: 24px;
+    padding: 2rem;
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(112, 66, 248, 0.3);
+  }
+
+  .clientModalTitle {
+    margin: 0 0 1.5rem 0;
+    color: #fff;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .clientModalFields {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .clientHint {
+    color: #666;
+    font-size: 0.75rem;
+  }
   
   /* Projects Grid */
   .projectsGrid {
@@ -1106,6 +1203,65 @@
     background: rgba(255, 68, 68, 0.15);
   }
 
+  .financeTableContainer {
+    overflow-x: auto;
+  }
+
+  .financeInlineActions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .financeModal {
+    max-width: 520px;
+  }
+
+  .financeModalBody {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .financeModalGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .financeFieldLabel {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #94a3b8;
+    font-size: 0.9rem;
+  }
+
+  .adminModalOverlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .adminModal {
+    width: 100%;
+    max-width: 500px;
+    border-radius: 20px;
+    padding: 2rem;
+  }
+
+  .adminModalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .permissionsModal {
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+
   @media (max-width: 900px) {
     .financeQuickToolbar {
       align-items: flex-start;
@@ -1176,14 +1332,62 @@
       padding: 1rem;
     }
 
+    .tabs {
+      gap: 0.5rem;
+      padding: 0.6rem;
+    }
+
+    .tab {
+      min-width: 44px;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .tabIcon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tabLabel {
+      display: none;
+    }
+
+    .tabBadge {
+      position: absolute;
+      top: 2px;
+      inset-inline-end: 2px;
+      margin-inline-start: 0;
+      min-width: 17px;
+      height: 17px;
+      font-size: 0.62rem;
+      padding: 0 4px;
+    }
+
     .chatIntroCard {
       grid-template-columns: 1fr;
-      padding: 0.75rem;
+      padding: 0.65rem;
+      gap: 0.5rem;
     }
 
     .chatWidgetShell {
-      padding: 0.65rem;
-      border-radius: 16px;
+      padding: 0.35rem;
+      border-radius: 14px;
+    }
+
+    .chatAdminSection {
+      gap: 0.85rem;
+    }
+
+    .chatAdminSection .sectionHeader {
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
     }
     
     .header {
@@ -1222,6 +1426,329 @@
     .statsGrid {
       grid-template-columns: 1fr;
     }
+
+    .financeCards {
+      grid-template-columns: 1fr;
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .financeCard {
+      padding: 1rem;
+      border-radius: 14px;
+    }
+
+    .financeAmount {
+      font-size: 1.4rem;
+    }
+
+    .financeFilters {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.55rem;
+    }
+
+    .financeFilterSelect,
+    .financeSearchInput {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .financeTableContainer {
+      overflow: visible;
+      border: none;
+      background: transparent;
+    }
+
+    .financeTable thead {
+      display: none;
+    }
+
+    .financeTable,
+    .financeTable tbody,
+    .financeTable tr,
+    .financeTable td {
+      display: block;
+      width: 100%;
+    }
+
+    .financeTable tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .financeTable tr {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .financeTable td {
+      padding: 0.72rem 0.9rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.86rem;
+      text-align: start;
+    }
+
+    .financeTable td:last-child {
+      border-bottom: none;
+    }
+
+    .financeTable td::before {
+      content: attr(data-label);
+      color: #94a3b8;
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .financeTable .financeInlineActions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .financeModal {
+      width: 100%;
+      max-width: none;
+      padding: 1rem;
+      border-radius: 16px;
+      max-height: 88vh;
+    }
+
+    .financeModalGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .financeModalActions {
+      flex-direction: column-reverse;
+      align-items: stretch;
+      gap: 0.6rem;
+    }
+
+    .financeModalActions .primaryBtn,
+    .financeModalActions .secondaryBtn {
+      width: 100%;
+    }
+
+    [dir="rtl"] .financeTable td {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .sectionHeader {
+      align-items: stretch;
+    }
+
+    .sectionActions {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .searchInput {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .sectionActions .primaryBtn {
+      width: 100%;
+    }
+
+    .clientFormCard {
+      padding: 1rem;
+      border-radius: 14px;
+    }
+
+    .clientFormGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .clientFormActions {
+      flex-direction: column;
+    }
+
+    .clientFormActions .primaryBtn,
+    .clientFormActions .secondaryBtn {
+      width: 100%;
+    }
+
+    .clientModalOverlay {
+      padding: 0.8rem;
+      align-items: flex-end;
+    }
+
+    .clientModal {
+      border-radius: 16px;
+      padding: 1rem;
+      max-width: none;
+      width: 100%;
+      max-height: 88vh;
+    }
+
+    .clientModalTitle {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+    }
+
+    .clientsTableContainer {
+      overflow: visible;
+      border: none;
+      background: transparent;
+    }
+
+    .clientsTable thead {
+      display: none;
+    }
+
+    .clientsTable,
+    .clientsTable tbody,
+    .clientsTable tr,
+    .clientsTable td {
+      display: block;
+      width: 100%;
+    }
+
+    .clientsTable tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .clientsTable tr {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .clientsTable td {
+      padding: 0.72rem 0.9rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.86rem;
+      text-align: start;
+    }
+
+    .clientsTable td:last-child {
+      border-bottom: none;
+    }
+
+    .clientsTable td::before {
+      content: attr(data-label);
+      color: #94a3b8;
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .clientsTable .actionButtons {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    [dir="rtl"] .clientsTable td {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .usersTableContainer {
+      overflow: visible;
+      border: none;
+      background: transparent;
+    }
+
+    .usersTable thead {
+      display: none;
+    }
+
+    .usersTable,
+    .usersTable tbody,
+    .usersTable tr,
+    .usersTable td {
+      display: block;
+      width: 100%;
+    }
+
+    .usersTable tbody {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .usersTable tr {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .usersTable td {
+      padding: 0.72rem 0.9rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.86rem;
+      text-align: start;
+    }
+
+    .usersTable td:last-child {
+      border-bottom: none;
+    }
+
+    .usersTable td::before {
+      content: attr(data-label);
+      color: #94a3b8;
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .usersTable td img {
+      width: 32px !important;
+      height: 32px !important;
+    }
+
+    .usersTable .iconBtn {
+      width: 34px;
+      height: 34px;
+    }
+
+    [dir="rtl"] .usersTable td {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .adminModalOverlay {
+      align-items: flex-end !important;
+      padding: 0.7rem !important;
+    }
+
+    .adminModal {
+      max-width: none !important;
+      width: 100% !important;
+      border-radius: 16px !important;
+      padding: 1rem !important;
+      max-height: 88vh !important;
+      overflow-y: auto !important;
+    }
+
+    .permissionsModal {
+      height: auto !important;
+    }
   }
 
   @media (max-width: 540px) {
@@ -1229,6 +1756,24 @@
     .overviewUtilityGrid,
     .overviewActions {
       grid-template-columns: 1fr;
+    }
+
+    .chatIntroItem {
+      padding: 0.45rem 0.6rem;
+    }
+
+    .chatIntroValue {
+      font-size: 0.78rem;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .chatIntroLabel {
+      font-size: 0.66rem;
+    }
+
+    .chatIntroCard {
+      margin-bottom: 0.3rem;
     }
 
     .overviewActionBlock,

@@ -24,6 +24,8 @@ function ReadOnlyProgressBar({
   hasSigned: boolean
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [activePointId, setActivePointId] = useState<string | null>(null)
+  const [isCompact, setIsCompact] = useState(false)
 
   const colors = ['#0070F3', '#00C781', '#FF8C00', '#FF4444', '#A855F7', '#EC4899', '#14B8A6', '#F59E0B']
   const getColor = (index: number) => colors[index % colors.length]
@@ -31,8 +33,58 @@ function ReadOnlyProgressBar({
   const completedItems = items.filter(i => completedIds.includes(i.id))
   const maxPercent = isFinished ? 100 : (completedItems.length > 0 ? Math.max(...completedItems.map(i => i.percent)) : 0)
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)')
+
+    const updateCompactState = () => {
+      setIsCompact(mediaQuery.matches)
+    }
+
+    updateCompactState()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateCompactState)
+      return () => mediaQuery.removeEventListener('change', updateCompactState)
+    }
+
+    mediaQuery.addListener(updateCompactState)
+    return () => mediaQuery.removeListener(updateCompactState)
+  }, [])
+
+  const trackSideMargin = isCompact ? '0.25rem' : '1rem'
+  const trackTopMargin = isCompact ? '3.25rem' : '5.5rem'
+  const trackHeight = isCompact ? '6px' : '8px'
+  const labelFontSize = isCompact ? '0.6rem' : '0.72rem'
+  const labelPadding = isCompact ? '2px 6px' : '3px 8px'
+  const labelMarginBottom = isCompact ? '6px' : '8px'
+  const tickHeight = isCompact ? '12px' : '16px'
+  const tickTop = isCompact ? '-3px' : '-4px'
+  const completedCircleSize = isCompact ? 24 : 30
+  const incompleteCircleSize = isCompact ? 12 : 15
+
+  const getLabelStyle = (isVisible: boolean, isCompleted: boolean, completedColor: string, extraBackground: string, extraBorder: string, extraColor: string) => ({
+    display: 'inline-block',
+    fontSize: labelFontSize,
+    fontWeight: 600,
+    padding: labelPadding,
+    borderRadius: '6px',
+    background: isVisible ? extraBackground : 'transparent',
+    border: `1px solid ${isVisible ? extraBorder : 'transparent'}`,
+    color: isVisible ? extraColor : 'transparent',
+    opacity: isVisible ? 1 : 0,
+    transform: isVisible ? 'translateY(0) scale(1)' : 'translateY(8px) scale(0.96)',
+    maxHeight: isVisible ? '64px' : '0px',
+    maxWidth: isCompact ? '78px' : 'none',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    transition: 'opacity 0.25s ease, transform 0.25s ease, max-height 0.25s ease, background 0.25s ease, border-color 0.25s ease, color 0.25s ease',
+    pointerEvents: 'none',
+    boxShadow: isVisible && isCompleted ? `0 0 10px ${completedColor}22` : 'none',
+  })
+
   return (
-    <div style={{ padding: '0.5rem 0 1rem' }}>
+    <div style={{ padding: isCompact ? '0.25rem 0 0.75rem' : '0.5rem 0 1rem' }}>
       {/* Percentage marks */}
       <div style={{
         display: 'flex',
@@ -52,13 +104,13 @@ function ReadOnlyProgressBar({
       {/* Line bar */}
       <div style={{
         position: 'relative',
-        height: '8px',
+        height: trackHeight,
         background: 'var(--bg-hover)',
         borderRadius: '4px',
-        marginTop: '5.5rem',
+        marginTop: trackTopMargin,
         marginBottom: '0.75rem',
-        marginLeft: '1rem',
-        marginRight: '1rem',
+        marginLeft: trackSideMargin,
+        marginRight: trackSideMargin,
       }}>
         {/* Fill gradient */}
         {maxPercent > 0 && (
@@ -80,9 +132,9 @@ function ReadOnlyProgressBar({
           <div key={tick} style={{
             position: 'absolute',
             left: `${tick}%`,
-            top: '-4px',
+            top: tickTop,
             width: '1px',
-            height: '16px',
+            height: tickHeight,
             background: 'rgba(255,255,255,0.08)',
           }} />
         ))}
@@ -91,8 +143,9 @@ function ReadOnlyProgressBar({
         {items.map((item, index) => {
           const isCompleted = completedIds.includes(item.id)
           const isHovered = hoveredId === item.id
+          const isExpanded = activePointId === item.id
           const color = isCompleted ? getColor(index) : 'rgb(100, 116, 139)'
-          const circleSize = isCompleted ? 30 : 15
+          const circleSize = isCompleted ? completedCircleSize : incompleteCircleSize
 
           return (
             <div
@@ -103,10 +156,12 @@ function ReadOnlyProgressBar({
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
                 zIndex: isHovered ? 15 : 10,
+                cursor: 'pointer',
                 
               }}
               onMouseEnter={() => setHoveredId(item.id)}
               onMouseLeave={() => setHoveredId(null)}
+              onClick={() => setActivePointId(prev => prev === item.id ? null : item.id)}
             >
               {/* Title badge above */}
               <div style={{
@@ -114,24 +169,17 @@ function ReadOnlyProgressBar({
                 bottom: '100%',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                marginBottom: '8px',
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
+                marginBottom: labelMarginBottom,
                 textAlign: 'center',
               }}>
-                <span style={{
-                  display: 'inline-block',
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  background: isCompleted
-                    ? 'rgba(0, 199, 129, 0.18)'
-                    : 'rgba(85, 99, 144, 0.29)',
-                  border: `1px solid ${isCompleted ? 'rgba(0,199,129,0.45)' : 'rgba(100,116,139,0.3)'}`,
-                  color: isCompleted ? '#00C781' : '#94a3b8',
-                  transition: 'all 0.2s ease',
-                }}>
+                <span style={getLabelStyle(
+                  isExpanded,
+                  isCompleted,
+                  color,
+                  isCompleted ? 'rgba(0, 199, 129, 0.18)' : 'rgba(85, 99, 144, 0.29)',
+                  isCompleted ? 'rgba(0,199,129,0.45)' : 'rgba(100,116,139,0.3)',
+                  isCompleted ? '#00C781' : '#94a3b8'
+                )}>
                   {item.title}
                 </span>
               </div>
@@ -178,27 +226,24 @@ function ReadOnlyProgressBar({
           top: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 20,
+          cursor: 'pointer',
         }}>
           <div style={{
             position: 'absolute',
             bottom: '100%',
             left: '50%',
             transform: 'translateX(-50%)',
-            marginBottom: '8px',
-            whiteSpace: 'nowrap',
+            marginBottom: labelMarginBottom,
             textAlign: 'center',
-            pointerEvents: 'none',
           }}>
-            <span style={{
-              display: 'inline-block',
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              padding: '3px 8px',
-              borderRadius: '6px',
-              background: hasSigned ? 'rgba(0,199,129,0.18)' : 'rgba(100,116,139,0.18)',
-              border: `1px solid ${hasSigned ? 'rgba(0,199,129,0.45)' : 'rgba(100,116,139,0.35)'}`,
-              color: hasSigned ? '#00C781' : '#94a3b8',
-            }}>
+            <span style={getLabelStyle(
+              activePointId === 'start',
+              hasSigned,
+              '#00C781',
+              hasSigned ? 'rgba(0,199,129,0.18)' : 'rgba(100,116,139,0.18)',
+              hasSigned ? 'rgba(0,199,129,0.45)' : 'rgba(100,116,139,0.35)',
+              hasSigned ? '#00C781' : '#94a3b8'
+            )}>
               {isRTL ? 'البداية' : 'Start'}
             </span>
           </div>
@@ -230,28 +275,24 @@ function ReadOnlyProgressBar({
           top: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 20,
+          cursor: 'pointer',
         }}>
           <div style={{
             position: 'absolute',
             bottom: '100%',
             left: '50%',
             transform: 'translateX(-50%)',
-            marginBottom: '8px',
-            whiteSpace: 'nowrap',
+            marginBottom: labelMarginBottom,
             textAlign: 'center',
-            pointerEvents: 'none',
           }}>
-            <span style={{
-              display: 'inline-block',
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              padding: '3px 8px',
-              borderRadius: '6px',
-              background: isFinished ? 'rgba(255,215,0,0.15)' : 'rgba(100,116,139,0.18)',
-              border: `1px solid ${isFinished ? 'rgba(255,215,0,0.45)' : 'rgba(100,116,139,0.35)'}`,
-              color: isFinished ? '#FFD700' : '#94a3b8',
-              transition: 'all 0.4s ease',
-            }}>
+            <span style={getLabelStyle(
+              activePointId === 'finish',
+              isFinished,
+              '#FFD700',
+              isFinished ? 'rgba(255,215,0,0.15)' : 'rgba(100,116,139,0.18)',
+              isFinished ? 'rgba(255,215,0,0.45)' : 'rgba(100,116,139,0.35)',
+              isFinished ? '#FFD700' : '#94a3b8'
+            )}>
               {isRTL ? 'النهاية' : 'Finish'}
             </span>
           </div>

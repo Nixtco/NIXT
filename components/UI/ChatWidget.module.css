@@ -59,6 +59,12 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+.sidebarHeaderMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sidebarTitle {
   font-weight: 600;
   color: var(--text-color, #fff);
@@ -72,6 +78,34 @@
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
+}
+
+.sidebarToggleBtn {
+  display: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim, #888);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.sidebarToggleBtn:hover {
+  color: #fff;
+  border-color: rgba(112, 66, 248, 0.35);
+  background: rgba(112, 66, 248, 0.12);
+}
+
+.sidebarToggleBtn svg {
+  transition: transform 0.25s ease;
+}
+
+.sidebarToggleBtnExpanded svg {
+  transform: rotate(180deg);
 }
 
 .chatList {
@@ -867,17 +901,229 @@
 }
 
 @media (max-width: 900px) {
+  .chatContainerAdmin {
+    gap: 10px;
+  }
+
   .chatMainRow {
+    flex-direction: column;
+    gap: 10px;
+    min-height: clamp(620px, 82vh, 900px);
+  }
+
+  [dir="rtl"] .chatMainRow {
     flex-direction: column;
   }
 
   .chatContainerAdmin .chatWindow,
   .chatContainerAdmin .chatSidebar {
-    height: 480px;
+    height: auto;
     border-radius: 16px;
   }
 
   .chatContainerAdmin .chatSidebar {
     width: 100%;
+    order: 1;
+    max-height: min(34vh, 320px);
+    border-radius: 16px;
+  }
+
+  .chatContainerAdmin .chatWindow {
+    order: 2;
+    height: min(72vh, 760px);
+    border-radius: 18px;
+  }
+
+  .chatHeader {
+    padding: 14px 16px;
+  }
+
+  .headerTitle {
+    font-size: 0.98rem;
+    line-height: 1.35;
+  }
+
+  .headerStatus {
+    font-size: 0.78rem;
+  }
+
+  .chatMessages {
+    padding: 16px 14px 20px;
+    gap: 12px;
+  }
+
+  .messageWrapper {
+    max-width: 94%;
+  }
+
+  .chatList {
+    max-height: none;
+    flex: 1;
+  }
+
+  .sidebarToggleBtn {
+    display: inline-flex;
+  }
+
+  .chatSidebar {
+    width: 100%;
+    max-height: min(38vh, 340px);
+    transition: max-height 0.28s ease;
+  }
+
+  .chatSidebarCollapsed {
+    max-height: 64px;
+  }
+}
+
+@media (max-width: 640px) {
+  .chatMainRow {
+    min-height: calc(100vh - 210px);
+  }
+
+  .chatContainerAdmin .chatSidebar {
+    max-height: min(32vh, 280px);
+  }
+
+  .chatContainerAdmin .chatWindow {
+    height: min(74vh, 780px);
+  }
+
+  .adminStatsBar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .adminStatCard {
+    min-width: 0;
+    padding: 10px;
+  }
+
+  .adminStatValue {
+    font-size: 1.1rem;
+  }
+
+  .adminStatLabel {
+    font-size: 0.68rem;
+  }
+
+  .chatInputContainer {
+    padding: 10px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .chatHeader {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .headerText {
+    min-width: 0;
+  }
+
+  .headerTitle {
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .headerStatus {
+    font-size: 0.74rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chatMessages {
+    padding: 12px 10px 16px;
+    gap: 10px;
+  }
+
+  .messageWrapper {
+    max-width: 98%;
+    gap: 8px;
+  }
+
+  .messageAvatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.74rem;
+  }
+
+  .messageMeta {
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 0.68rem;
+  }
+
+  .messageContent {
+    padding: 11px 13px;
+    border-radius: 14px;
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .messageImage,
+  .messageVideo {
+    max-width: min(72vw, 260px);
+  }
+
+  .chatInputWrapper {
+    order: 1;
+    width: 100%;
+  }
+
+  .actionIcons {
+    order: 2;
+    margin-inline-start: auto;
+    padding-right: 0;
+    gap: 2px;
+  }
+
+  [dir="rtl"] .actionIcons {
+    margin-inline-start: 0;
+    margin-inline-end: auto;
+    padding-left: 0;
+  }
+
+  .sendBtn {
+    order: 3;
+    width: 100%;
+    border-radius: 12px;
+    padding: 10px 14px;
+  }
+
+  .sendBtn span {
+    display: none;
+  }
+
+  .chatSidebar {
+    width: 100%;
+  }
+
+  .chatListItem {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .chatListAvatar {
+    width: 36px;
+    height: 36px;
+    font-size: 0.78rem;
+  }
+
+  .chatListName {
+    font-size: 0.82rem;
+  }
+
+  .chatListPreview {
+    font-size: 0.72rem;
+  }
+
+  .chatListSubline {
+    font-size: 0.66rem;
   }
 }

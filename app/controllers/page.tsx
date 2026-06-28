@@ -2249,38 +2249,56 @@ function ControllersContent() {
         <button
           className={`${styles.tab} ${activeTab === 'overview' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('overview')}
+          title={isRTL ? 'نظرة عامة' : 'Overview'}
+          aria-label={isRTL ? 'نظرة عامة' : 'Overview'}
         >
-          {isRTL ? 'نظرة عامة' : 'Overview'}
+          <span className={styles.tabIcon} aria-hidden="true"><BarChartIcon size={16} /></span>
+          <span className={styles.tabLabel}>{isRTL ? 'نظرة عامة' : 'Overview'}</span>
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'clients' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('clients')}
+          title={t.controllers.clients.title}
+          aria-label={t.controllers.clients.title}
         >
-          {t.controllers.clients.title}
+          <span className={styles.tabIcon} aria-hidden="true"><UsersIcon size={16} /></span>
+          <span className={styles.tabLabel}>{t.controllers.clients.title}</span>
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'projects' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('projects')}
+          title={t.controllers.projects.title}
+          aria-label={t.controllers.projects.title}
         >
-          {t.controllers.projects.title}
+          <span className={styles.tabIcon} aria-hidden="true"><FolderPlusIcon size={16} /></span>
+          <span className={styles.tabLabel}>{t.controllers.projects.title}</span>
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'finances' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('finances')}
+          title={t.controllers.finances.title}
+          aria-label={t.controllers.finances.title}
         >
-          {t.controllers.finances.title}
+          <span className={styles.tabIcon} aria-hidden="true"><WalletIcon size={16} /></span>
+          <span className={styles.tabLabel}>{t.controllers.finances.title}</span>
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'users' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('users')}
+          title={t.controllers.users.title}
+          aria-label={t.controllers.users.title}
         >
-          {t.controllers.users.title}
+          <span className={styles.tabIcon} aria-hidden="true"><LockIcon size={16} /></span>
+          <span className={styles.tabLabel}>{t.controllers.users.title}</span>
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'chat' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('chat')}
+          title={isRTL ? 'المحادثات' : 'Messages'}
+          aria-label={isRTL ? 'المحادثات' : 'Messages'}
         >
-          {isRTL ? 'المحادثات' : 'Messages'}
+          <span className={styles.tabIcon} aria-hidden="true"><FileTextIcon size={16} /></span>
+          <span className={styles.tabLabel}>{isRTL ? 'المحادثات' : 'Messages'}</span>
           {chatUnreadCount > 0 && (
             <span className={styles.tabBadge}>{chatUnreadCount}</span>
           )}
@@ -2509,21 +2527,14 @@ function ControllersContent() {
 
             {/* Add Client Form */}
             {showAddClientForm && (
-              <div style={{
-                background: 'rgba(112, 66, 248, 0.05)',
-                border: '1px solid rgba(112, 66, 248, 0.15)',
-                borderRadius: '20px',
-                padding: '2rem',
-                marginBottom: '2rem',
-                animation: 'fadeIn 0.3s ease'
-              }}>
-                <h3 style={{ margin: '0 0 1.5rem 0', color: '#fff', fontSize: '1.2rem' }}>
+              <div className={styles.clientFormCard}>
+                <h3 className={styles.clientFormTitle}>
                   {isRTL ? 'إضافة عميل جديد' : 'Add New Client'}
                 </h3>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className={styles.clientFormGrid}>
                   <div>
-                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                    <label className={styles.clientFieldLabel}>
                       {t.controllers.clients.name}
                     </label>
                     <input
@@ -2536,7 +2547,7 @@ function ControllersContent() {
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                    <label className={styles.clientFieldLabel}>
                       {t.controllers.clients.email}
                     </label>
                     <input
@@ -2550,7 +2561,7 @@ function ControllersContent() {
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                    <label className={styles.clientFieldLabel}>
                       {t.controllers.clients.phone}
                     </label>
                     <input
@@ -2565,7 +2576,7 @@ function ControllersContent() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className={styles.clientFormActions}>
                   <button
                     className={styles.primaryBtn}
                     onClick={() => {
@@ -2630,37 +2641,15 @@ function ControllersContent() {
 
             {/* Edit Client Form */}
             {editingClient && (
-              <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.8)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 9998,
-                padding: '2rem',
-              }} onClick={() => setEditingClient(null)}>
-                <div style={{
-                  background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.98), rgba(31, 41, 55, 0.98))',
-                  border: '1px solid rgba(112, 66, 248, 0.3)',
-                  borderRadius: '24px',
-                  padding: '2rem',
-                  maxWidth: '600px',
-                  width: '100%',
-                  maxHeight: '90vh',
-                  overflowY: 'auto',
-                  boxShadow: '0 20px 60px rgba(112, 66, 248, 0.3)',
-                }} onClick={(e) => e.stopPropagation()}>
-                  <h3 style={{ margin: '0 0 1.5rem 0', color: '#fff', fontSize: '1.5rem', fontWeight: 700 }}>
+              <div className={styles.clientModalOverlay} onClick={() => setEditingClient(null)}>
+                <div className={styles.clientModal} onClick={(e) => e.stopPropagation()}>
+                  <h3 className={styles.clientModalTitle}>
                     {isRTL ? 'تعديل بيانات العميل' : 'Edit Client Details'}
                   </h3>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div className={styles.clientModalFields}>
                     <div>
-                      <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                      <label className={styles.clientFieldLabel}>
                         {isRTL ? 'البريد الإلكتروني' : 'Email'}
                       </label>
                       <input
@@ -2677,13 +2666,13 @@ function ControllersContent() {
                           cursor: 'not-allowed',
                         }}
                       />
-                      <small style={{ color: '#666', fontSize: '0.75rem' }}>
+                      <small className={styles.clientHint}>
                         {isRTL ? 'لا يمكن تعديل البريد الإلكتروني' : 'Email cannot be changed'}
                       </small>
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                      <label className={styles.clientFieldLabel}>
                         {isRTL ? 'الاسم الأول' : 'First Name'}
                       </label>
                       <input
@@ -2697,7 +2686,7 @@ function ControllersContent() {
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                      <label className={styles.clientFieldLabel}>
                         {isRTL ? 'اسم العائلة' : 'Last Name'}
                       </label>
                       <input
@@ -2711,7 +2700,7 @@ function ControllersContent() {
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                      <label className={styles.clientFieldLabel}>
                         {isRTL ? 'اسم العرض' : 'Display Name'}
                       </label>
                       <input
@@ -2725,7 +2714,7 @@ function ControllersContent() {
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                      <label className={styles.clientFieldLabel}>
                         {isRTL ? 'رقم الهاتف' : 'Phone Number'}
                       </label>
                       <input
@@ -2740,7 +2729,7 @@ function ControllersContent() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '1rem' }}>
+                  <div className={styles.clientFormActions}>
                     <button
                       className={styles.primaryBtn}
                       onClick={handleUpdateClient}
@@ -2771,8 +2760,8 @@ function ControllersContent() {
                 <div style={{ fontSize: '1.2rem' }}>{isRTL ? 'لا يوجد عملاء' : 'No clients found'}</div>
               </div>
             ) : (
-              <div className={styles.tableContainer}>
-                <table className={styles.table}>
+              <div className={`${styles.tableContainer} ${styles.clientsTableContainer}`}>
+                <table className={`${styles.table} ${styles.clientsTable}`}>
                   <thead>
                     <tr>
                       <th>{t.controllers.clients.name}</th>
@@ -2787,10 +2776,10 @@ function ControllersContent() {
                   <tbody>
                     {filteredClients.map(client => (
                       <tr key={client.id}>
-                        <td>{client.display_name || `${client.first_name || ''} ${client.last_name || ''}`.trim() || '-'}</td>
-                        <td>{client.email}</td>
-                        <td>{client.phone || '-'}</td>
-                        <td>
+                        <td data-label={t.controllers.clients.name}>{client.display_name || `${client.first_name || ''} ${client.last_name || ''}`.trim() || '-'}</td>
+                        <td data-label={t.controllers.clients.email}>{client.email}</td>
+                        <td data-label={t.controllers.clients.phone}>{client.phone || '-'}</td>
+                        <td data-label={t.controllers.clients.status}>
                           <span 
                             className={styles.badge}
                             style={{ backgroundColor: getStatusColor(client.status || 'pending') }}
@@ -2798,7 +2787,7 @@ function ControllersContent() {
                             {client.status || 'pending'}
                           </span>
                         </td>
-                        <td>
+                        <td data-label={isRTL ? 'نوع التسجيل' : 'Auth Provider'}>
                           <span 
                             className={styles.badge}
                             style={{ 
@@ -2809,8 +2798,8 @@ function ControllersContent() {
                             {client.auth_provider || 'local'}
                           </span>
                         </td>
-                        <td>{formatDateTime(client.lastActivity || client.updated_at)}</td>
-                        <td>
+                        <td data-label={t.controllers.clients.lastActivity}>{formatDateTime(client.lastActivity || client.updated_at)}</td>
+                        <td data-label={isRTL ? 'إجراءات' : 'Actions'}>
                           <div className={styles.actionButtons}>
                             <button 
                               className={styles.iconBtn} 
@@ -4810,7 +4799,7 @@ function ControllersContent() {
               </div>
             </div>
 
-            <div className={styles.tableContainer}>
+            <div className={`${styles.tableContainer} ${styles.financeTableContainer}`}>
               <div className={styles.financeQuickToolbar}>
                 <span className={styles.financeQuickTitle}>{t.controllers.finances.quickAdd}</span>
                 <div className={styles.financeTypeGrid}>
@@ -4860,7 +4849,7 @@ function ControllersContent() {
                 />
               </div>
 
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.financeTable}`}>
                 <thead>
                   <tr>
                     <th>{t.controllers.finances.type}</th>
@@ -4890,18 +4879,18 @@ function ControllersContent() {
                       const meta = FINANCE_TYPE_META[transaction.type]
                       return (
                         <tr key={transaction.id}>
-                          <td>
+                          <td data-label={t.controllers.finances.type}>
                             <span className={styles.badge} style={{ backgroundColor: meta.color }}>
                               {getFinanceTypeLabel(transaction.type)}
                             </span>
                           </td>
-                          <td>{getTransactionDescription(transaction, isRTL)}</td>
-                          <td>{getTransactionReference(transaction, isRTL)}</td>
-                          <td style={{ color: meta.color, fontWeight: 'bold' }}>
+                          <td data-label={t.financial.description}>{getTransactionDescription(transaction, isRTL)}</td>
+                          <td data-label={t.controllers.finances.reference}>{getTransactionReference(transaction, isRTL)}</td>
+                          <td data-label={t.financial.amount} style={{ color: meta.color, fontWeight: 'bold' }}>
                             {meta.sign}{formatCurrency(transaction.amount)}
                           </td>
-                          <td>{formatDate(transaction.date)}</td>
-                          <td>
+                          <td data-label={t.financial.date}>{formatDate(transaction.date)}</td>
+                          <td data-label={t.financial.status}>
                             <span className={styles.badge} style={{ backgroundColor: getStatusColor(transaction.status) }}>
                               {transaction.status === 'completed'
                                 ? t.financial.completed
@@ -4910,9 +4899,9 @@ function ControllersContent() {
                                   : t.financial.failed}
                             </span>
                           </td>
-                          <td>
+                          <td data-label={isRTL ? 'إجراء' : 'Action'}>
                             {confirmDeleteFinanceId === transaction.id ? (
-                              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              <div className={styles.financeInlineActions}>
                                 <button
                                   className={styles.financeDeleteBtn}
                                   onClick={() => handleDeleteFinanceTransaction(transaction.id)}
@@ -4947,7 +4936,7 @@ function ControllersContent() {
             {/* Add Transaction Modal */}
             {showFinanceModal && (
               <div className={styles.modalOverlay} onClick={closeFinanceModal}>
-                <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+                <div className={`${styles.modal} ${styles.financeModal}`} onClick={(e) => e.stopPropagation()}>
                   <h3 style={{ marginBottom: '0.5rem', color: '#fff' }}>
                     {financeModalType === 'income' && t.controllers.finances.addIncome}
                     {financeModalType === 'withdrawal' && t.controllers.finances.addWithdrawal}
@@ -4967,10 +4956,10 @@ function ControllersContent() {
                     <div className={styles.financeError} style={{ marginBottom: '1rem' }}>{financeFormError}</div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className={styles.financeModalBody}>
                     {(financeModalType === 'income' || financeModalType === 'refund') && (
                       <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <label className={styles.financeFieldLabel}>
                           {t.controllers.finances.selectProject} *
                         </label>
                         <select
@@ -4989,7 +4978,7 @@ function ControllersContent() {
 
                     {financeModalType === 'withdrawal' && (
                       <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <label className={styles.financeFieldLabel}>
                           {t.controllers.finances.selectAdmin} *
                         </label>
                         <select
@@ -5011,7 +5000,7 @@ function ControllersContent() {
                     {financeModalType === 'expense' && (
                       <>
                         <div>
-                          <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          <label className={styles.financeFieldLabel}>
                             {t.controllers.finances.selectCategory} *
                           </label>
                           <select
@@ -5029,7 +5018,7 @@ function ControllersContent() {
                         </div>
                         {financeExpenseCategory === 'other' && (
                           <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                            <label className={styles.financeFieldLabel}>
                               {t.controllers.finances.customCategory} *
                             </label>
                             <input
@@ -5045,9 +5034,9 @@ function ControllersContent() {
                       </>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className={styles.financeModalGrid}>
                       <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <label className={styles.financeFieldLabel}>
                           {t.controllers.finances.amount} *
                         </label>
                         <input
@@ -5062,7 +5051,7 @@ function ControllersContent() {
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        <label className={styles.financeFieldLabel}>
                           {t.controllers.finances.date} *
                         </label>
                         <input
@@ -5076,7 +5065,7 @@ function ControllersContent() {
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                      <label className={styles.financeFieldLabel}>
                         {t.controllers.finances.notes}
                       </label>
                       <textarea
@@ -5156,8 +5145,8 @@ function ControllersContent() {
             )}
 
             {/* Admins Table */}
-            <div className={styles.tableContainer}>
-              <table className={styles.table}>
+            <div className={`${styles.tableContainer} ${styles.usersTableContainer}`}>
+              <table className={`${styles.table} ${styles.usersTable}`}>
                 <thead>
                   <tr>
                     <th>{isRTL ? 'المسؤول' : 'Admin'}</th>
@@ -5186,7 +5175,7 @@ function ControllersContent() {
                   ) : (
                     filteredAdmins.map((admin) => (
                       <tr key={admin.id}>
-                        <td>
+                        <td data-label={isRTL ? 'المسؤول' : 'Admin'}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             {admin.user?.avatar_url ? (
                               <img
@@ -5217,12 +5206,12 @@ function ControllersContent() {
                             </div>
                           </div>
                         </td>
-                        <td>
+                        <td data-label={isRTL ? 'البريد الإلكتروني' : 'Email'}>
                           <div style={{ color: '#94a3b8' }} dir="ltr">
                             {admin.user?.email || (isRTL ? 'بدون بريد' : 'No email')}
                           </div>
                         </td>
-                        <td>
+                        <td data-label={isRTL ? 'الصلاحيات' : 'Permissions'}>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                             {admin.permissions.length === 0 ? (
                               <span style={{
@@ -5266,7 +5255,7 @@ function ControllersContent() {
                             )}
                           </div>
                         </td>
-                        <td>
+                        <td data-label={isRTL ? 'مطور' : 'Developer'}>
                           <span
                             title={admin.is_developer ? (isRTL ? 'مطور' : 'Developer') : (isRTL ? 'ليس مطوراً' : 'Not a developer')}
                             style={{
@@ -5285,12 +5274,12 @@ function ControllersContent() {
                             {admin.is_developer ? '✓' : '✗'}
                           </span>
                         </td>
-                        <td>
+                        <td data-label={isRTL ? 'تاريخ الإضافة' : 'Date Added'}>
                           <span style={{ color: '#94a3b8' }}>
                             {admin.created_at ? formatDate(admin.created_at) : (isRTL ? 'غير محدد' : 'Not specified')}
                           </span>
                         </td>
-                        <td>
+                        <td data-label={isRTL ? 'الإجراءات' : 'Actions'}>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button
                               onClick={() => {
@@ -5322,7 +5311,7 @@ function ControllersContent() {
 
             {/* Add Admin Modal */}
             {showAddAdminModal && (
-              <div style={{
+              <div className={styles.adminModalOverlay} style={{
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0, 0, 0, 0.5)',
@@ -5333,7 +5322,7 @@ function ControllersContent() {
                 zIndex: 1000,
                 padding: '1rem'
               }}>
-                <div style={{
+                <div className={styles.adminModal} style={{
                   background: '#1E293B',
                   borderRadius: '20px',
                   padding: '2rem',
@@ -5341,7 +5330,7 @@ function ControllersContent() {
                   maxWidth: '500px',
                   border: '1px solid rgba(255, 255, 255, 0.1)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                  <div className={styles.adminModalHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                     <h2 style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#fff' }}>
                       {isRTL ? 'إضافة مسؤول جديد' : 'Add New Admin'}
                     </h2>
@@ -5492,7 +5481,7 @@ function ControllersContent() {
 
             {/* Permissions Modal */}
             {showPermissionsModal && selectedAdmin && (
-              <div style={{
+              <div className={styles.adminModalOverlay} style={{
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0, 0, 0, 0.5)',
@@ -5503,7 +5492,7 @@ function ControllersContent() {
                 zIndex: 1000,
                 padding: '1rem'
               }}>
-                <div style={{
+                <div className={`${styles.adminModal} ${styles.permissionsModal}`} style={{
                   background: '#1E293B',
                   borderRadius: '20px',
                   padding: '2rem',
@@ -5516,7 +5505,7 @@ function ControllersContent() {
                   maxWidth: '500px',
                   border: '1px solid rgba(255, 255, 255, 0.1)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                  <div className={styles.adminModalHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                     <h2 style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#fff' }}>
                       {isRTL ? 'إدارة الصلاحيات' : 'Manage Permissions'}
                     </h2>

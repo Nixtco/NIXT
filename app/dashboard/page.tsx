@@ -38,6 +38,8 @@ function DashboardContent() {
   const { user, isAuthenticated, isLoading, logout } = useGlobalAuth()
   
   const [showSettings, setShowSettings] = useState(false)
+  const [isSmallScreen, setIsSmallScreen] = useState(false)
+  const [mobileView, setMobileView] = useState<'overview' | 'chat'>('overview')
   
   const { nextTheme, setTheme, currentTheme } = useTheme()
 
@@ -68,6 +70,24 @@ function DashboardContent() {
       router.push('/login')
     }
   }, [isAuthenticated, isLoading, router])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)')
+
+    const updateScreenState = () => {
+      setIsSmallScreen(mediaQuery.matches)
+    }
+
+    updateScreenState()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateScreenState)
+      return () => mediaQuery.removeEventListener('change', updateScreenState)
+    }
+
+    mediaQuery.addListener(updateScreenState)
+    return () => mediaQuery.removeListener(updateScreenState)
+  }, [])
 
   // All hooks are above — now we can do conditional returns
 
@@ -198,22 +218,52 @@ function DashboardContent() {
         </div>
       </div>
 
-      <div className={styles.dashboardContent}>
-        {availableSections.map((section) => {
-          if (!enabledSectionIds.includes(section.id)) return null
-          
-          const Component = section.component
-          return <Component key={section.id} />
-        })}
+      <div className={styles.mobileQuickActions}>
+        <button
+          type="button"
+          className={`${styles.mobileQuickActionBtn} ${mobileView === 'overview' ? styles.mobileQuickActionBtnActive : ''}`}
+          onClick={() => setMobileView('overview')}
+        >
+          {language === 'ar' ? 'نظرة عامة للمشروع' : 'Project Overview'}
+        </button>
+        <button
+          type="button"
+          className={`${styles.mobileQuickActionBtn} ${mobileView === 'chat' ? styles.mobileQuickActionBtnActive : ''}`}
+          onClick={() => setMobileView('chat')}
+        >
+          {language === 'ar' ? 'المحادثة' : 'Chat'}
+        </button>
       </div>
 
-      <ChatWidget />
+      {(!isSmallScreen || mobileView === 'overview') && (
+        <div className={styles.dashboardContent}>
+          {availableSections.map((section) => {
+            if (!enabledSectionIds.includes(section.id)) return null
+            if (isSmallScreen && section.id !== 'project') return null
 
-      <ThemeSwitcher 
-        onThemeChange={nextTheme} 
-        onSetTheme={setTheme} 
-        currentTheme={currentTheme}
-      />
+            const Component = section.component
+            return (
+              <section key={section.id} id={section.id === 'project' ? 'project-overview' : `${section.id}-section`}>
+                <Component />
+              </section>
+            )
+          })}
+        </div>
+      )}
+
+      {(!isSmallScreen || mobileView === 'chat') && (
+        <div id="dashboard-chat">
+          <ChatWidget />
+        </div>
+      )}
+
+      {!isSmallScreen && (
+        <ThemeSwitcher 
+          onThemeChange={nextTheme} 
+          onSetTheme={setTheme} 
+          currentTheme={currentTheme}
+        />
+      )}
     </div>
   )
 }

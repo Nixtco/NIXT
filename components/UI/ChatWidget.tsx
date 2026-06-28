@@ -202,6 +202,8 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   const [chatFilter, setChatFilter] = useState<'all' | 'unread'>('all')
   const [chatSearch, setChatSearch] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSmallScreen, setIsSmallScreen] = useState(false)
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true)
 
   const generalChatName = language === 'ar' ? 'استفسار عام' : 'General Inquiry'
   const generalChatSubtitle = language === 'ar' ? 'اسأل عن أي شيء' : 'Ask about anything'
@@ -464,6 +466,26 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showEmojiPicker])
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 900px)')
+
+    const updateLayout = () => {
+      const small = mediaQuery.matches
+      setIsSmallScreen(small)
+      setIsSidebarExpanded(!small)
+    }
+
+    updateLayout()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateLayout)
+      return () => mediaQuery.removeEventListener('change', updateLayout)
+    }
+
+    mediaQuery.addListener(updateLayout)
+    return () => mediaQuery.removeListener(updateLayout)
+  }, [])
+
   const handleEmojiSelect = (emojiData: EmojiClickData) => {
     setInputValue((prev) => prev + emojiData.emoji)
     setShowEmojiPicker(false)
@@ -558,6 +580,10 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
 
   const handleSelectChat = async (chatId: string) => {
     setActiveChatId(chatId)
+    if (isSmallScreen) {
+      setIsSidebarExpanded(false)
+    }
+
     if (isAdminMode) {
       setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
       setActiveConversationId(chatId)
@@ -938,17 +964,31 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
         </div>
       </div>
 
-      <aside className={styles.chatSidebar}>
+      <aside className={`${styles.chatSidebar} ${isSmallScreen && !isSidebarExpanded ? styles.chatSidebarCollapsed : ''}`}>
         <div className={styles.sidebarHeader}>
-          <span className={styles.sidebarTitle}>
-            {language === 'ar' ? 'المحادثات' : 'Chats'}
-          </span>
-          <span className={styles.sidebarCount}>
-            {isAdminMode && totalUnread > 0 ? totalUnread : chats.length}
-          </span>
+          <div className={styles.sidebarHeaderMain}>
+            <span className={styles.sidebarTitle}>
+              {language === 'ar' ? 'المحادثات' : 'Chats'}
+            </span>
+            <span className={styles.sidebarCount}>
+              {isAdminMode && totalUnread > 0 ? totalUnread : chats.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            className={`${styles.sidebarToggleBtn} ${isSidebarExpanded ? styles.sidebarToggleBtnExpanded : ''}`}
+            onClick={() => setIsSidebarExpanded(prev => !prev)}
+            aria-label={isSidebarExpanded
+              ? (language === 'ar' ? 'إخفاء قائمة المحادثات' : 'Hide chats list')
+              : (language === 'ar' ? 'إظهار قائمة المحادثات' : 'Show chats list')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
         </div>
 
-        {isAdminMode && (
+        {isSidebarExpanded && isAdminMode && (
           <>
             <div className={styles.sidebarSearchWrap}>
               <input
@@ -979,6 +1019,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
           </>
         )}
 
+        {isSidebarExpanded && (
         <div className={styles.chatList}>
           {projectsLoading && (isAdminMode ? visibleChats.length === 0 : chats.length <= 1) && (
             <div className={styles.sidebarLoading}>
@@ -1035,6 +1076,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
             </button>
           )})}
         </div>
+        )}
       </aside>
       </div>
     </div>

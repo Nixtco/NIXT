@@ -5,12 +5,12 @@ import styles from './ProjectMediaManagerModal.module.css'
 import {
   type Project as APIProject,
   type ProjectMediaItem,
-  updateProject,
+  updateProjectMedia,
 } from '@/app/Projects/apiFunctions'
 import { loadProjectMedia, saveProjectMedia } from '@/lib/projectMediaStorage'
 
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024
-const MAX_VIDEO_SIZE = 12 * 1024 * 1024
+const MAX_IMAGE_SIZE = 3 * 1024 * 1024
+const MAX_VIDEO_SIZE = 6 * 1024 * 1024
 
 interface ProjectMediaManagerModalProps {
   project: APIProject
@@ -159,16 +159,23 @@ const ProjectMediaManagerModal: FC<ProjectMediaManagerModalProps> = ({
   }
 
   const handleSave = async () => {
+    setUploadError(null)
     setIsSaving(true)
     try {
-      saveProjectMedia(project.id, mediaItems)
-      try {
-        await updateProject(project.id, { media_updates: mediaItems })
-      } catch {
-        /* localStorage is primary until backend supports media */
+      const response = await updateProjectMedia(project.id, mediaItems)
+      if (!response.success) {
+        throw new Error(isRTL ? 'فشل حفظ الوسائط على الخادم' : 'Failed to save media on server')
       }
+
+      saveProjectMedia(project.id, mediaItems)
       onSaved(project.id, mediaItems)
       onClose()
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : (isRTL ? 'تعذر حفظ الوسائط. حاول مرة أخرى' : 'Could not save media. Please try again')
+      )
     } finally {
       setIsSaving(false)
     }
@@ -220,7 +227,7 @@ const ProjectMediaManagerModal: FC<ProjectMediaManagerModalProps> = ({
                   {isRTL ? 'اسحب صورة أو فيديو هنا' : 'Drag & drop image or video here'}
                 </p>
                 <p className={styles.uploadHint}>
-                  {isRTL ? 'أو انقر للاختيار · PNG, JPG, MP4 · حتى 5MB للصور' : 'Or click to browse · PNG, JPG, MP4 · up to 5MB images'}
+                  {isRTL ? 'أو انقر للاختيار · PNG, JPG, MP4 · حتى 3MB للصور و6MB للفيديو' : 'Or click to browse · PNG, JPG, MP4 · up to 3MB images and 6MB videos'}
                 </p>
               </div>
 

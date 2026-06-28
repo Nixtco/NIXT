@@ -4464,34 +4464,6 @@ function ControllersContent() {
               <div className={styles.financeSuccess}>{financeSuccess}</div>
             )}
 
-            {/* Quick Add — 4 equal type cards */}
-            <h3 className={styles.subsectionTitle}>{t.controllers.finances.quickAdd}</h3>
-            <div className={styles.financeTypeGrid}>
-              {([
-                { type: 'income' as FinanceTransactionType, icon: '+', hint: isRTL ? 'دفعة مشروع' : 'Project payment' },
-                { type: 'withdrawal' as FinanceTransactionType, icon: '↓', hint: isRTL ? 'سحب مسؤول' : 'Admin withdrawal' },
-                { type: 'expense' as FinanceTransactionType, icon: '−', hint: isRTL ? 'خادم، دومين...' : 'Server, domain...' },
-                { type: 'refund' as FinanceTransactionType, icon: '↩', hint: isRTL ? 'إرجاع لمشروع' : 'Project refund' },
-              ]).map(({ type, icon, hint }) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={styles.financeTypeCard}
-                  onClick={() => openFinanceModal(type)}
-                  style={{ borderColor: `${FINANCE_TYPE_META[type].color}33` }}
-                >
-                  <div
-                    className={styles.financeTypeIcon}
-                    style={{ background: `${FINANCE_TYPE_META[type].color}22`, color: FINANCE_TYPE_META[type].color }}
-                  >
-                    {icon}
-                  </div>
-                  <p className={styles.financeTypeLabel}>{getFinanceTypeLabel(type)}</p>
-                  <p className={styles.financeTypeHint}>{hint}</p>
-                </button>
-              ))}
-            </div>
-
             {/* Summary cards */}
             <div className={styles.financeCards}>
               <div className={styles.financeCard}>
@@ -4527,6 +4499,33 @@ function ControllersContent() {
             </div>
 
             <div className={styles.tableContainer}>
+              <div className={styles.financeQuickToolbar}>
+                <span className={styles.financeQuickTitle}>{t.controllers.finances.quickAdd}</span>
+                <div className={styles.financeTypeGrid}>
+                  {([
+                    { type: 'income' as FinanceTransactionType, icon: '+' },
+                    { type: 'withdrawal' as FinanceTransactionType, icon: '↓' },
+                    { type: 'expense' as FinanceTransactionType, icon: '−' },
+                    { type: 'refund' as FinanceTransactionType, icon: '↩' },
+                  ]).map(({ type, icon }) => (
+                    <button
+                      key={type}
+                      type="button"
+                      className={styles.financeTypeCard}
+                      onClick={() => openFinanceModal(type)}
+                      style={{ borderColor: `${FINANCE_TYPE_META[type].color}33` }}
+                    >
+                      <div
+                        className={styles.financeTypeIcon}
+                        style={{ background: `${FINANCE_TYPE_META[type].color}22`, color: FINANCE_TYPE_META[type].color }}
+                      >
+                        {icon}
+                      </div>
+                      <p className={styles.financeTypeLabel}>{getFinanceTypeLabel(type)}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className={styles.financeFilters}>
                 <select
@@ -5264,7 +5263,21 @@ function ControllersContent() {
                 </p>
               </div>
             </div>
-            <ChatWidget mode="admin" onUnreadChange={setChatUnreadCount} />
+
+            <div className={styles.chatIntroCard}>
+              <div className={styles.chatIntroItem}>
+                <span className={styles.chatIntroLabel}>{isRTL ? 'القسم' : 'Section'}</span>
+                <strong className={styles.chatIntroValue}>{isRTL ? 'دعم ومتابعة العملاء' : 'Client Support & Follow-up'}</strong>
+              </div>
+              <div className={styles.chatIntroItem}>
+                <span className={styles.chatIntroLabel}>{isRTL ? 'الوضع' : 'Mode'}</span>
+                <strong className={styles.chatIntroValue}>{isRTL ? 'لوحة تحكم إدارية' : 'Admin Dashboard View'}</strong>
+              </div>
+            </div>
+
+            <div className={styles.chatWidgetShell}>
+              <ChatWidget mode="admin" onUnreadChange={setChatUnreadCount} />
+            </div>
           </div>
         )}
 

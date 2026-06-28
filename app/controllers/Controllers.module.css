@@ -154,6 +154,48 @@
     gap: 1.25rem;
   }
 
+  .chatIntroCard {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+    padding: 1rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(130deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  }
+
+  .chatIntroItem {
+    padding: 0.75rem 0.9rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .chatIntroLabel {
+    color: rgba(148, 163, 184, 0.9);
+    font-size: 0.76rem;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .chatIntroValue {
+    color: #fff;
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  .chatWidgetShell {
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.95rem;
+    overflow: hidden;
+  }
+
   .sectionSubtitle {
     margin: 0.35rem 0 0;
     font-size: 0.9rem;
@@ -697,55 +739,93 @@
     text-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   }
 
-  .financeTypeGrid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+  .financeQuickToolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 8% 12%, rgba(0, 199, 129, 0.08), transparent 48%),
+      linear-gradient(130deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+    backdrop-filter: blur(8px);
+  }
+
+  .financeQuickTitle {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .financeTypeGrid {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 0;
   }
 
   .financeTypeCard {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 1.25rem;
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    padding: 0.45rem 0.8rem;
+    min-height: 38px;
+    min-width: 112px;
     cursor: pointer;
-    transition: all 0.25s ease;
-    text-align: center;
+    transition: all 0.2s ease;
+    text-align: start;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
   }
 
   .financeTypeCard:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.26);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+  }
+
+  .financeTypeCard:focus-visible {
+    outline: 2px solid rgba(0, 199, 129, 0.5);
+    outline-offset: 2px;
   }
 
   .financeTypeIcon {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
+    font-size: 0.85rem;
     font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   .financeTypeLabel {
     color: #fff;
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     font-weight: 600;
     margin: 0;
+    line-height: 1;
+    white-space: nowrap;
   }
 
   .financeTypeHint {
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 0.78rem;
-    margin: 0;
-    line-height: 1.4;
+    display: none;
   }
 
   .financeFilters {
@@ -828,14 +908,41 @@
   }
 
   @media (max-width: 900px) {
-    .financeTypeGrid {
-      grid-template-columns: repeat(2, 1fr);
+    .financeQuickToolbar {
+      align-items: flex-start;
+      padding: 0.65rem;
+    }
+
+    .financeTypeCard {
+      min-width: 106px;
     }
   }
 
   @media (max-width: 480px) {
+    .financeQuickToolbar {
+      gap: 0.55rem;
+    }
+
+    .financeQuickTitle {
+      font-size: 0.76rem;
+      padding: 0.3rem 0.55rem;
+    }
+
     .financeTypeGrid {
-      grid-template-columns: 1fr;
+      width: 100%;
+      gap: 0.45rem;
+    }
+
+    .financeTypeCard {
+      flex: 1 1 calc(50% - 0.3rem);
+      justify-content: center;
+      min-width: 0;
+      padding: 0.4rem 0.55rem;
+      min-height: 36px;
+    }
+
+    .financeTypeLabel {
+      font-size: 0.76rem;
     }
   }
   
@@ -868,6 +975,16 @@
   @media (max-width: 768px) {
     .controllersPage {
       padding: 1rem;
+    }
+
+    .chatIntroCard {
+      grid-template-columns: 1fr;
+      padding: 0.75rem;
+    }
+
+    .chatWidgetShell {
+      padding: 0.65rem;
+      border-radius: 16px;
     }
     
     .header {

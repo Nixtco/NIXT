@@ -236,6 +236,16 @@ export async function updateProject(id: string, payload: UpdateProjectPayload): 
 }
 
 /**
+ * Update project media gallery only
+ */
+export async function updateProjectMedia(id: string, media_updates: ProjectMediaItem[]): Promise<MutationResponse> {
+  return apiCall<MutationResponse>(`${BASE_PATH}/${id}/media`, {
+    method: 'PATCH',
+    body: JSON.stringify({ media_updates }),
+  })
+}
+
+/**
  * Delete a project
  */
 export async function deleteProject(id: string): Promise<MutationResponse> {

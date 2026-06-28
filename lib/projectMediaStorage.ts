@@ -6,6 +6,18 @@ export function loadProjectMedia(
   projectId: string,
   apiMedia?: ProjectMediaItem[]
 ): ProjectMediaItem[] {
+  if (apiMedia?.length) {
+    const sorted = [...apiMedia].sort(
+      (a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+    )
+    try {
+      localStorage.setItem(storageKey(projectId), JSON.stringify(sorted))
+    } catch {
+      /* ignore */
+    }
+    return sorted
+  }
+
   try {
     const raw = localStorage.getItem(storageKey(projectId))
     if (raw) {
@@ -18,12 +30,6 @@ export function loadProjectMedia(
     }
   } catch {
     /* ignore */
-  }
-
-  if (apiMedia?.length) {
-    return [...apiMedia].sort(
-      (a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
-    )
   }
 
   return []

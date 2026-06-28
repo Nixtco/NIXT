@@ -193,12 +193,12 @@ function DashboardContent() {
             </div>
           )}
           
-          <button
+          {/* <button
             className={styles.settingsBtn}
             onClick={() => setShowSettings(true)}
           >
             ⚙️ {t.dashboard.settings}
-          </button>
+          </button> */}
 
           {/* Logout Button */}
           <button

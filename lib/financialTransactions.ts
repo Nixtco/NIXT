@@ -120,7 +120,7 @@ export function getTransactionReference(
       return '-'
   }
 }
-
+// just for upload in github
 export function getTransactionDescription(tx: FinanceTransaction, isRTL = false): string {
   const typeLabels: Record<FinanceTransactionType, { ar: string; en: string }> = {
     income: { ar: 'إيراد', en: 'Income' },

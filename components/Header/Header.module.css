@@ -9,6 +9,7 @@
   display: flex;
   gap: 40px;
   list-style: none;
+  align-items: center;
 }
 
 .mainNav a {
@@ -33,6 +34,27 @@
   border-radius: 6px;
   margin-left: 10px;
   transition: all 0.3s ease;
+}
+
+.languageItem {
+  display: flex;
+  align-items: center;
+}
+
+.languageTextButton {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 400;
+}
+
+.languageTextButton:hover {
+  color: var(--text-white);
 }
 
 .loginBtn:hover {
@@ -131,10 +153,20 @@
     width: 100%;
   }
 
+  .languageItem {
+    width: 100%;
+    justify-content: center;
+  }
+
   .mainNav a {
     display: block;
     font-size: 18px;
     padding: 10px 0;
+  }
+
+  .languageTextButton {
+    margin-top: 8px;
+    font-size: 16px;
   }
 
   .loginBtn {

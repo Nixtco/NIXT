@@ -1,22 +1,27 @@
 import React from 'react';
+import { useLanguage } from '@/hooks/useLanguage';
+import { marketingContent } from '@/lib/marketingContent';
 import styles from './ProductDirection.module.css';
 
 const ProductDirection: React.FC = () => {
+  const { language } = useLanguage();
+  const content = marketingContent[language].productDirection;
+
   return (
-    <section className={styles.section}>
+    <section className={styles.section} dir="ltr">
       <div className={styles.container}>
-        <div className={styles.header}>
+        <div className={`${styles.header} ${language === 'ar' ? styles.headerArabic : ''}`}>
           <div className={styles.label}>
-            Client Project Timeline
+            {content.label}
           </div>
           <h2 className={styles.title}>
-            Track Every Step, Real-Time.
+            {content.title}
           </h2>
           <p className={styles.description}>
             <strong>
-              Complete transparency for your peace of mind.
+              {content.strong}
             </strong>{' '}
-            We provide a dedicated timeline for your project that details exactly what happened every day. Monitor progress, updates, and milestones at any time.
+            {content.description}
           </p>
         </div>
 
@@ -38,19 +43,19 @@ const ProductDirection: React.FC = () => {
                 <div className={styles.icon}>
                   <div className={styles.diamond} />
                 </div>
-                <span>System Design</span>
-                <span style={{ position: 'absolute', top: '-30px', left: '0', color: '#888' }}>Phase 1: Planning</span>
+                <span>{content.systemDesign}</span>
+                <span style={{ position: 'absolute', top: '-30px', left: '0', color: '#888' }}>{content.planningPhase}</span>
               </div>
 
               <div className={`${styles.itemBar} ${styles.itemBeta}`}>
                 <div className={styles.icon}>
                   <div className={styles.diamondGreen} />
                 </div>
-                <span>Development</span>
+                <span>{content.development}</span>
               </div>
 
               <div className={`${styles.itemBar} ${styles.itemRLHF}`}>
-                 <span style={{ marginRight: '10px' }}>Deployment &amp; Live</span>
+                 <span style={{ marginRight: '10px' }}>{content.deployment}</span>
                 <div className={styles.icon}>
                    <div className={styles.diamond} />
                 </div>

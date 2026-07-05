@@ -38,7 +38,7 @@
   color: white;
   font-size: 18px;
   font-weight: 200;
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--font-sans), sans-serif;
   transition: border-color 0.3s;
 }
 

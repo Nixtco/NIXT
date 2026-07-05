@@ -3,6 +3,8 @@
 import React, { useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useLanguage } from '@/hooks/useLanguage';
+import { marketingContent } from '@/lib/marketingContent';
 import styles from './Pricing.module.css';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -25,9 +27,11 @@ const CheckIcon = () => (
 export default function PricingPage() {
   const router = useRouter();
   const cardsRef = useRef<HTMLDivElement>(null);
+  const { language, dir } = useLanguage();
+  const content = marketingContent[language].pricing;
 
-  const goToCheckout = (plan: string, amount: number) => {
-    router.push(`/payment?plan=${plan}&amount=${amount}`);
+  const goToLogin = () => {
+    router.push('/login');
   };
 
   useEffect(() => {
@@ -61,11 +65,11 @@ export default function PricingPage() {
     <main>
       <Header onSmoothScroll={noOpScroll} />
       
-      <div className={styles.container}>
+      <div className={styles.container} dir={dir}>
         <div className={styles.titleWrapper}>
-          <h1 className={styles.title}>Transparent Pricing</h1>
+          <h1 className={styles.title}>{content.title}</h1>
           <p className={styles.subtitle}>
-            Choose the perfect plan for your business needs. No hidden fees, just quality service.
+            {content.subtitle}
           </p>
         </div>
 
@@ -73,80 +77,44 @@ export default function PricingPage() {
              // Fallback inline handler if needed, though useEffect is cleaner for multiple elements
              // Logic mainly handled in useEffect
         }}>
-          {/* Card 1: Landing Page (Entry Level) */}
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Landing Page</h2>
-            <div className={styles.priceWrapper}>
-              <span className={styles.currency}>$</span>
-              <span className={styles.priceRange}>100 - 500</span>
+          {content.cards.map((card, index) => (
+            <div key={card.title} className={`${styles.card} ${index === 1 ? styles.popular : ''}`}>
+              {index === 1 && <div className={styles.badge}>{content.mostPopular}</div>}
+              <h2 className={styles.cardTitle}>{card.title}</h2>
+              <div className={styles.priceWrapper}>
+                <div className={styles.priceLine}>
+                  <span className={styles.currency}>{content.startingFrom}</span>
+                  <span className={styles.priceRange}>{card.price}</span>
+                </div>
+                <p className={styles.bottomText} style={{ marginTop: '0.75rem' }}>
+                  {card.summary}
+                </p>
+              </div>
+              <div className={styles.divider}></div>
+              <ul className={styles.features}>
+                {card.features.map((feature) => (
+                  <li key={feature}><CheckIcon /> {feature}</li>
+                ))}
+              </ul>
+              <button className={styles.placeholderBtn} onClick={goToLogin}>
+                {card.cta}
+              </button>
             </div>
-            <div className={styles.divider}></div>
-            <ul className={styles.features}>
-              <li><CheckIcon /> High Conversion Design</li>
-              <li><CheckIcon /> Fully Responsive</li>
-              <li><CheckIcon /> SEO Optimization</li>
-              <li><CheckIcon /> Fast Loading Speed</li>
-              <li><CheckIcon /> Contact Form Integration</li>
-            </ul>
-            <button className={styles.placeholderBtn} onClick={() => goToCheckout('landing', 100)}>
-              Pay Now
-            </button>
-          </div>
-
-          {/* Card 2: Dashboard (Mid Level / Popular) */}
-          <div className={`${styles.card} ${styles.popular}`}>
-            <div className={styles.badge}>Most Popular</div>
-            <h2 className={styles.cardTitle}>Dashboard</h2>
-            <div className={styles.priceWrapper}>
-              <span className={styles.currency}>$</span>
-              <span className={styles.priceRange}>200 - 1500</span>
-            </div>
-            <div className={styles.divider}></div>
-            <ul className={styles.features}>
-              <li><CheckIcon /> Real-time Data Visualization</li>
-              <li><CheckIcon /> Comprehensive Analytics</li>
-              <li><CheckIcon /> User Roles & Management</li>
-              <li><CheckIcon /> Exportable Reports</li>
-              <li><CheckIcon /> Dark/Light Mode Support</li>
-              <li><CheckIcon /> API Integration</li>
-            </ul>
-            <button className={styles.placeholderBtn} onClick={() => goToCheckout('dashboard', 200)}>
-              Pay Now
-            </button>
-          </div>
-
-          {/* Card 3: E-commerce / Financial (Premium) */}
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>E-Commerce & Finance</h2>
-            <div className={styles.priceWrapper}>
-              <span className={styles.currency}>$</span>
-              <span className={styles.priceRange}>500 - 2500</span>
-            </div>
-            <div className={styles.divider}></div>
-            <ul className={styles.features}>
-              <li><CheckIcon /> Secure Payment Gateway</li>
-              <li><CheckIcon /> Inventory Management</li>
-              <li><CheckIcon /> Order Tracking System</li>
-              <li><CheckIcon /> Financial Reporting</li>
-              <li><CheckIcon /> Customer Database</li>
-              <li><CheckIcon /> Multi-currency Support</li>
-            </ul>
-            <button className={styles.placeholderBtn} onClick={() => goToCheckout('ecommerce', 500)}>
-              Pay Now
-            </button>
-          </div>
+          ))}
         </div>
 
-        {/* Bottom Card */}
         <div className={styles.bottomCard}>
           <div className={styles.bottomContent}>
-            <h3 className={styles.bottomTitle}>Need something custom?</h3>
+            <h3 className={styles.bottomTitle}>{content.customTitle}</h3>
             <p className={styles.bottomText}>
-              If your request doesn&apos;t fit these categories or you have specific budget constraints, we&apos;re here to help. Let&apos;s discuss a custom solution.
+              {content.customDescription1}
+            </p>
+            <p className={styles.bottomText} style={{ marginTop: '0.75rem' }}>
+              {content.customDescription2}
             </p>
           </div>
-          <Link href="/payment?plan=custom&amount=250" className={styles.makeOfferBtn}>
-             Make an Offer
+           <Link href="/login" className={styles.makeOfferBtn}>
+             {content.customCta}
           </Link>
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import { useTheme } from '@/hooks/useTheme'
 import { useSmoothScroll } from '@/hooks/useSmoothScroll'
+import { useLanguage } from '@/hooks/useLanguage'
 
 import Header from '@/components/Header'
 import HeroSection from '@/components/Hero'
@@ -18,13 +19,14 @@ import Footer from '@/components/Footer'
 export default function Home() {
   const { nextTheme, setTheme } = useTheme()
   const { scrollToSection } = useSmoothScroll()
+  const { dir } = useLanguage()
 
   const handleContactClick = () => {
     scrollToSection('contact')
   }
 
   return (
-    <main>
+    <main dir={dir}>
       {/* Navigation */}
       <Header onSmoothScroll={scrollToSection} />
 
@@ -38,7 +40,7 @@ export default function Home() {
       <BentoGrid />
 
       {/* Featured Projects */}
-      <ProjectsSection onContactClick={handleContactClick} />
+      <ProjectsSection />
 
       {/* Services */}
       <ServicesSection onContactClick={handleContactClick} />

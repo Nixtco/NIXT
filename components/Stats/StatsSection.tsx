@@ -78,7 +78,7 @@ const StatsSection: FC = () => {
       )
     },
     { 
-      value: '20', 
+      value: '15', 
       label: (t as any).stats?.revenue || 'Revenue Generated',
       prefix: '+',
       suffix: 'K',

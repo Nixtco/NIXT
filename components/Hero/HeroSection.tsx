@@ -1,49 +1,59 @@
 import { FC } from 'react'
+import { useLanguage } from '@/hooks/useLanguage'
+import { marketingContent } from '@/lib/marketingContent'
 import styles from './Hero.module.css'
 
 const HeroSection: FC = () => {
+  const { language } = useLanguage()
+  const content = marketingContent[language].hero
+
   return (
-    <div className={styles.introContainer}>
+    <div id="hero" className={styles.introContainer} dir="ltr">
       <div className={styles.topInfo} dir="ltr">
-        DIGITAL INNOVATION & TECH GROUP
+        {content.topInfo}
       </div>
 
       <div className={styles.centerLogo}>
         <h1 dir="ltr">Nixt</h1>
-        <span className={styles.tagline}>building the future</span>
+        <span
+          className={`${styles.tagline} ${language === 'ar' ? styles.taglineArabic : ''}`}
+          dir={language === 'ar' ? 'rtl' : 'ltr'}
+        >
+          {content.brandTagline}
+        </span>
         
         <div className={styles.ctaContainer}>
           <a href="#projects" className="vercel-btn vercel-btn-primary">
-            Start Building
+            {content.primaryCta}
           </a>
           <a href="#contact" className="vercel-btn vercel-btn-secondary">
-            Get in Touch
+            {content.secondaryCta}
           </a>
         </div>
       </div>
 
       <div className={styles.bottomSections}>
         <div className={styles.bottomItem}>
-          <h4>NIXT TECH</h4>
+          <h4>{content.techTitle}</h4>
           <p>
-            Integrated Software Solutions
-            <br />& Smart Systems Development
+            {content.techLine1}
+            <br />{content.techLine2}
           </p>
         </div>
         <div className={`${styles.bottomItem} ${styles.center}`}>
-          <h4>SERVICES</h4>
+          <h4>{content.servicesTitle}</h4>
           <p>
-            Web Development | Apps | SaaS
+            {content.servicesLine1}
             <br />
-            Cloud Infrastructure
+            {content.servicesLine2}
           </p>
         </div>
         <div className={`${styles.bottomItem} ${styles.right}`}>
-          <h4>BRANDING</h4>
+          <h4>{content.brandingTitle}</h4>
           <p>
-            CREATIVE DESIGN
+            {content.brandingLine1}
             <br />
-            DIGITAL SOLUTIONS
+            {content.brandingLine2}
           </p>
         </div>
       </div>

@@ -77,6 +77,67 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // ===================== API Base URL =====================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1';
+const AUTH_LAST_SEEN_AT_KEY = 'nixt_auth_last_seen_at';
+const CACHE_LAST_SYNC_DATE_KEY = 'nixt_cache_last_sync_date';
+const MAX_CLIENT_DATA_AGE_MS = 20 * 24 * 60 * 60 * 1000;
+
+function clearClientCacheData() {
+    localStorage.removeItem('nixt-dashboard-session');
+    localStorage.removeItem('nixt-shared-controller-data');
+    localStorage.removeItem('nixt_financial_transactions');
+    localStorage.removeItem('nixt_activity_logs_queue_v1');
+    localStorage.removeItem('nixt_activity_logs_last_flush_at_v1');
+    localStorage.removeItem('nixt_activity_logs_flush_interval_ms_v1');
+
+    const mediaKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('nixt_project_media_')) {
+            mediaKeys.push(key);
+        }
+    }
+
+    mediaKeys.forEach((key) => localStorage.removeItem(key));
+}
+
+function clearStaleClientData() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem(AUTH_LAST_SEEN_AT_KEY);
+    localStorage.removeItem(CACHE_LAST_SYNC_DATE_KEY);
+    clearClientCacheData();
+}
+
+function isClientDataExpired(): boolean {
+    const lastSeenRaw = localStorage.getItem(AUTH_LAST_SEEN_AT_KEY);
+    if (!lastSeenRaw) return false;
+
+    const lastSeenAt = Number(lastSeenRaw);
+    if (!Number.isFinite(lastSeenAt) || lastSeenAt <= 0) {
+        return false;
+    }
+
+    return Date.now() - lastSeenAt >= MAX_CLIENT_DATA_AGE_MS;
+}
+
+function getTodayLocalDateString(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function clearCacheIfDateChanged() {
+    const today = getTodayLocalDateString();
+    const lastSyncDate = localStorage.getItem(CACHE_LAST_SYNC_DATE_KEY);
+
+    if (lastSyncDate && lastSyncDate !== today) {
+        clearClientCacheData();
+    }
+
+    localStorage.setItem(CACHE_LAST_SYNC_DATE_KEY, today);
+}
 
 // ===================== Provider =====================
 
@@ -88,6 +149,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Load token from localStorage on app start
     useEffect(() => {
         const initAuth = async () => {
+            if (isClientDataExpired()) {
+                clearStaleClientData();
+                setToken(null);
+                setUser(null);
+                setIsLoading(false);
+                return;
+            }
+
+            clearCacheIfDateChanged();
+
+            localStorage.setItem(AUTH_LAST_SEEN_AT_KEY, String(Date.now()));
+
             const storedToken = localStorage.getItem('token');
             
             if (storedToken) {
@@ -187,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (data.refreshToken) {
                     localStorage.setItem('refreshToken', data.refreshToken);
                 }
+                localStorage.setItem(AUTH_LAST_SEEN_AT_KEY, String(Date.now()));
                 const [userResponse, roleData] = await Promise.all([
                     fetch(`${API_BASE_URL}/auth/me`, {
                         headers: {
@@ -233,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (response.ok) {
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('refreshToken', data.refreshToken);
+                localStorage.setItem(AUTH_LAST_SEEN_AT_KEY, String(Date.now()));
                 
                 const roleData = await fetchRoleAndPermissions(data.token);
                 
@@ -277,6 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setToken(result.token);
                 localStorage.setItem('token', result.token);
                 localStorage.setItem('refreshToken', result.refreshToken);
+                localStorage.setItem(AUTH_LAST_SEEN_AT_KEY, String(Date.now()));
                 return { success: true };
             } else {
                 return { success: false, error: result.error || 'Registration failed' };
@@ -304,6 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (data.refreshToken) {
                     localStorage.setItem('refreshToken', data.refreshToken);
                 }
+                localStorage.setItem(AUTH_LAST_SEEN_AT_KEY, String(Date.now()));
                 
                 const roleData = await fetchRoleAndPermissions(data.token);
                 
@@ -331,6 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem(AUTH_LAST_SEEN_AT_KEY);
     };
 
     // Refresh user data

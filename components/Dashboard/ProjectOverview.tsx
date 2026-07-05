@@ -751,7 +751,7 @@ function ProjectMediaGallery({
           flexDirection: isRTL ? 'row-reverse' : 'row',
         }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-dim)' }}>
-            {isRTL ? '📸 آخر التطورات البصرية' : '📸 Visual Progress Updates'}
+            {isRTL ? 'آخر التطورات البصرية' : 'Visual Progress Updates'}
           </span>
           <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', opacity: 0.7 }}>
             {items.length} {isRTL ? 'ملف' : 'items'}

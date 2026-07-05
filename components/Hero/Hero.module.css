@@ -8,7 +8,7 @@
 }
 
 .topInfo {
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 11px;
   letter-spacing: 3px;
   font-weight: 300;
@@ -26,7 +26,7 @@
 }
 
 .centerLogo h1 {
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--font-poppins), sans-serif;
   font-size: 120px;
   font-weight: 600;
   letter-spacing: -4px;
@@ -50,6 +50,15 @@
   margin-bottom: 40px;
 }
 
+.centerLogo .taglineArabic {
+  font-family: var(--font-cairo), sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 18px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .ctaContainer {
   display: flex;
   gap: 16px;
@@ -71,7 +80,7 @@
 }
 
 .bottomItem h4 {
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 10px;
   letter-spacing: 2px;
   color: var(--text-dim);
@@ -131,6 +140,11 @@
     font-size: 11px;
     letter-spacing: 8px;
     margin-bottom: 30px;
+  }
+
+  .centerLogo .taglineArabic {
+    font-size: 14px;
+    letter-spacing: 0;
   }
 
   .ctaContainer {

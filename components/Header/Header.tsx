@@ -4,6 +4,8 @@ import { FC, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useGlobalAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/hooks/useLanguage'
+import { marketingContent } from '@/lib/marketingContent'
 import styles from './Header.module.css'
 
 interface HeaderProps {
@@ -13,7 +15,11 @@ interface HeaderProps {
 const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const { user, isAuthenticated } = useGlobalAuth()
+  const { language, setLanguage } = useLanguage()
   const router = useRouter()
+  const content = marketingContent[language].header
+  const nextLanguage = language === 'ar' ? 'en' : 'ar'
+  const languageLabel = language === 'ar' ? 'English' : 'العربية'
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault()
@@ -41,13 +47,13 @@ const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
   }
 
   const getUserDisplayName = (): string => {
-    if (!user) return 'User'
+    if (!user) return content.login
     
     return user.display_name || user.first_name || user.email.split('@')[0]
   }
 
   return (
-    <nav className={styles.mainNav} aria-label="Main Navigation">
+    <nav className={styles.mainNav} aria-label="Main Navigation" dir="ltr">
       <button 
         className={`${styles.hamburger} ${isMenuOpen ? styles.active : ''}`}
         onClick={toggleMenu}
@@ -62,23 +68,33 @@ const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
       <ul className={`${styles.navList} ${isMenuOpen ? styles.open : ''}`}>
         <li>
           <a href="#projects" onClick={(e) => handleNavClick(e, 'projects')}>
-            Projects
+            {content.projects}
           </a>
         </li>
         <li>
           <a href="#services" onClick={(e) => handleNavClick(e, 'services')}>
-            Services
+            {content.services}
           </a>
         </li>
         <li>
           <a href="/login">
-            Contact
+            {content.contact}
           </a>
         </li>
         <li>
           <Link href="/pricing">
-            Pricing
+            {content.pricing}
           </Link>
+        </li>
+        <li className={styles.languageItem}>
+          <button
+            type="button"
+            className={styles.languageTextButton}
+            onClick={() => setLanguage(nextLanguage)}
+            aria-label={content.language}
+          >
+            {languageLabel}
+          </button>
         </li>
         <li>
           {isAuthenticated && user ? (
@@ -86,13 +102,13 @@ const Header: FC<HeaderProps> = ({ onSmoothScroll }) => {
               href="#" 
               onClick={handleUserClick}
               className={styles.userNameBtn}
-              title={`Go to ${user.role === 'admin' || user.role === 'owner' ? 'Controllers' : 'Dashboard'}`}
+              title={`${user.role === 'admin' || user.role === 'owner' ? content.controllers : content.dashboard}`}
             >
               {getUserDisplayName()}
             </a>
           ) : (
             <Link href="/login" className={styles.loginBtn}>
-              Login
+              {content.login}
             </Link>
           )}
         </li>

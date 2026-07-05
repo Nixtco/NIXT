@@ -1,6 +1,8 @@
 'use client'
 
 import { FC, useRef } from 'react'
+import { useLanguage } from '@/hooks/useLanguage'
+import { marketingContent } from '@/lib/marketingContent'
 import styles from './Services.module.css'
 
 interface Service {
@@ -50,6 +52,8 @@ interface ServicesProps {
 
 const ServiceCard: FC<{ service: Service; onClick: () => void }> = ({ service, onClick }) => {
   const cardRef = useRef<HTMLDivElement>(null)
+  const { language } = useLanguage()
+  const content = marketingContent[language].services
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return
@@ -76,7 +80,7 @@ const ServiceCard: FC<{ service: Service; onClick: () => void }> = ({ service, o
         onClick={(e) => { e.preventDefault(); onClick(); }} 
         className={styles.learnMoreBtn}
       >
-        <span>Learn more</span>
+        <span>{content.learnMore}</span>
         <svg className={styles.arrowIcon} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="5" y1="12" x2="19" y2="12"></line>
           <polyline points="12 5 19 12 12 19"></polyline>
@@ -87,19 +91,27 @@ const ServiceCard: FC<{ service: Service; onClick: () => void }> = ({ service, o
 }
 
 const ServicesSection: FC<ServicesProps> = ({ onContactClick }) => {
+  const { language, dir } = useLanguage()
+  const content = marketingContent[language].services
+  const localizedServices = services.map((service, index) => ({
+    ...service,
+    title: content.items[index]?.title || service.title,
+    description: content.items[index]?.description || service.description,
+  }))
+
   return (
-    <section id="services" className={styles.contentSection}>
+    <section id="services" className={styles.contentSection} dir={dir}>
       <div className={styles.glowBg} />
       
       <div className={styles.sectionHeader}>
-        <h2 className={styles.sectionTitle}>The Essence of Innovation</h2>
+        <h2 className={styles.sectionTitle}>{content.title}</h2>
         <p className={styles.sectionSubtitle}>
-          Crafting digital experiences that merge cutting-edge technology with human-centric design.
+          {content.subtitle}
         </p>
       </div>
 
       <div className={styles.servicesGrid}>
-        {services.map((service, index) => (
+        {localizedServices.map((service, index) => (
           <ServiceCard 
             key={index} 
             service={service} 

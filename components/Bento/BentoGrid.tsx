@@ -1,10 +1,14 @@
 'use client'
 
 import { FC, useRef, useEffect } from 'react'
+import { useLanguage } from '@/hooks/useLanguage'
+import { marketingContent } from '@/lib/marketingContent'
 import styles from './BentoGrid.module.css'
 
 const BentoGrid: FC = () => {
   const containerRef = useRef<HTMLDivElement>(null)
+   const { language, dir } = useLanguage()
+   const content = marketingContent[language].bento
 
   useEffect(() => {
     const container = containerRef.current
@@ -29,14 +33,14 @@ const BentoGrid: FC = () => {
   }, [])
 
   return (
-    <section className={styles.bentoSection}>
+      <section className={styles.bentoSection} dir={dir}>
       <div className={styles.dotBackground} />
       <div className={styles.gridContainer} ref={containerRef}>
 
         <div className={`${styles.card} ${styles.rowSpan2}`}>
-          <h3 className={styles.headerTitle}>We engineer<br />Everything.</h3>
+               <h3 className={styles.headerTitle}>{content.titleLine1}<br />{content.titleLine2}</h3>
           <p className={styles.cardDesc} style={{ fontSize: '18px', color: '#888' }}>
-            From stunning websites to complex accounting systems serving millions. If you can imagine it, we build it.
+                  {content.leadDescription}
           </p>
           <div className={styles.cardVisual} style={{ background: 'transparent' }}>
              <div className={styles.scene}>
@@ -54,20 +58,20 @@ const BentoGrid: FC = () => {
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Smart Business Logic</h3>
-          <p className={styles.cardDesc}>Custom accounting systems and intelligent workflows tailored to your company&apos;s rules.</p>
+               <h3 className={styles.cardTitle}>{content.logicTitle}</h3>
+               <p className={styles.cardDesc}>{content.logicDescription}</p>
            <div className={styles.arrowIcon}>→</div>
           <div className={styles.cardVisual}>
             <div className={styles.thinkingInput}>
-               <span>Processing Logic...</span>
+                      <span>{content.processing}</span>
                <span style={{color: '#0070f3'}}>➤</span>
             </div>
           </div>
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>High-Scale Systems</h3>
-          <p className={styles.cardDesc}>Robust architectures designed to handle millions of active users without downtime.</p>
+               <h3 className={styles.cardTitle}>{content.scaleTitle}</h3>
+               <p className={styles.cardDesc}>{content.scaleDescription}</p>
            <div className={styles.arrowIcon}>→</div>
           <div className={styles.cardVisual}>
              <div className={styles.tagsGrid}>
@@ -82,8 +86,8 @@ const BentoGrid: FC = () => {
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Web Platforms</h3>
-          <p className={styles.cardDesc}>Modern, responsive websites &amp; dashboards built with cutting-edge tech.</p>
+               <h3 className={styles.cardTitle}>{content.webTitle}</h3>
+               <p className={styles.cardDesc}>{content.webDescription}</p>
            <div className={styles.arrowIcon}>→</div>
           <div className={styles.cardVisual}>
              <div className={styles.browserWindow}>
@@ -92,14 +96,14 @@ const BentoGrid: FC = () => {
                    <div style={{background: '#ffbd2e'}} className={styles.control}></div>
                    <div style={{background: '#27c93f'}} className={styles.control}></div>
                 </div>
-                <div style={{color: '#666', fontSize: '14px'}}>What will you create?</div>
+                        <div style={{color: '#666', fontSize: '14px'}}>{content.webPrompt}</div>
              </div>
           </div>
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>E-Commerce</h3>
-          <p className={styles.cardDesc}>Powerful online stores and marketplaces optimized for maximum conversion.</p>
+               <h3 className={styles.cardTitle}>{content.commerceTitle}</h3>
+               <p className={styles.cardDesc}>{content.commerceDescription}</p>
            <div className={styles.arrowIcon}>→</div>
           <div className={styles.cardVisual}>
              <div className={styles.commerceContainer}>
@@ -111,8 +115,8 @@ const BentoGrid: FC = () => {
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Payment Processing</h3>
-          <p className={styles.cardDesc}>We handle complex payment gateways, invoicing, and payout operations for your business.</p>
+               <h3 className={styles.cardTitle}>{content.paymentTitle}</h3>
+               <p className={styles.cardDesc}>{content.paymentDescription}</p>
            <div className={styles.arrowIcon}>→</div>
           <div className={styles.cardVisual}>
              <div className={styles.digitalCardWrapper}>
@@ -134,8 +138,8 @@ const BentoGrid: FC = () => {
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Enterprise SaaS</h3>
-          <p className={styles.cardDesc}>Multi-tenant platforms enabling you to serve thousands of corporate clients.</p>
+               <h3 className={styles.cardTitle}>{content.saasTitle}</h3>
+               <p className={styles.cardDesc}>{content.saasDescription}</p>
            <div className={styles.arrowIcon}>→</div>
           <div className={styles.cardVisual}>
              <div className={styles.stackedWindows}>
@@ -166,11 +170,11 @@ const BentoGrid: FC = () => {
          <div className={`${styles.card} ${styles.span3}`} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ maxWidth: '50%' }}>
              <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#666', fontSize: '12px'}}>
-                <span>⬢</span> Framework-Defined Infrastructure
+                <span>⬢</span> {content.infraLabel}
              </div>
              <h3 className={styles.cardTitle} style={{ fontSize: '28px', lineHeight: '1.4' }}>
-                <span style={{ color: '#fff' }}>From concept to production in record time.</span>{' '}
-                <span style={{ color: '#888' }}>Nixt Group deeply understands your needs to provision the right resources and optimize for high-performance apps.</span>
+                <span style={{ color: '#fff' }}>{content.infraPrimary}</span>{' '}
+                <span style={{ color: '#888' }}>{content.infraSecondary}</span>
              </h3>
           </div>
           

@@ -1,6 +1,8 @@
 'use client'
 
 import Image from 'next/image'
+import { useLanguage } from '@/hooks/useLanguage'
+import { marketingContent } from '@/lib/marketingContent'
 import styles from './LogoTicker.module.css'
 
 interface LogoItem {
@@ -21,9 +23,12 @@ const logos: LogoItem[] = [
 ]
 
 export default function LogoTicker() {
+  const { language } = useLanguage()
+  const content = marketingContent[language].logoTicker
+
   return (
-    <div className={styles.container}>
-      <h3 className={styles.title}>Our Projects</h3>
+    <div className={styles.container} dir="ltr">
+      <h3 className={styles.title}>{content.title}</h3>
 
       <div className={styles.logoTicker}>
         <div className={styles.tickerWrapper}>

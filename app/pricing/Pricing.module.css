@@ -187,11 +187,18 @@
   z-index: 2;
 }
 
+.priceLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+}
+
 .currency {
-  font-size: 1.5rem;
-  vertical-align: top;
-  margin-right: 4px;
+  font-size: 1rem;
   color: var(--text-dim);
+  font-weight: 500;
+  line-height: 1;
 }
 
 .priceRange {

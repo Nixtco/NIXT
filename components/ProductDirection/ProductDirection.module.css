@@ -14,6 +14,18 @@
   margin-bottom: 6rem;
 }
 
+.headerArabic {
+  text-align: right;
+}
+
+.headerArabic .label {
+  justify-content: flex-end;
+}
+
+.headerArabic .description {
+  margin-left: auto;
+}
+
 .label {
   color: #22c55e;
   font-size: 0.9rem;

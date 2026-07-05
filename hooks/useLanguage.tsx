@@ -16,24 +16,24 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export const LanguageProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguageState] = useState<Language>('ar')
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (typeof window === 'undefined') return 'ar'
+
+    const saved = localStorage.getItem('nixt-lang') as Language | null
+    return saved === 'ar' || saved === 'en' ? saved : 'ar'
+  })
 
   useEffect(() => {
-    // Load saved language
-    const saved = localStorage.getItem('nixt-lang') as Language
-    if (saved && (saved === 'ar' || saved === 'en')) {
-      setLanguageState(saved)
-    }
-  }, [])
+    document.documentElement.lang = language
+    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr'
+    localStorage.setItem('nixt-lang', language)
+  }, [language])
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang)
-    localStorage.setItem('nixt-lang', lang)
-    document.documentElement.lang = lang
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
   }
 
-  const value = {
+  const value: LanguageContextType = {
     language,
     setLanguage,
     t: translations[language],
@@ -41,7 +41,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <LanguageContext.Provider value={value as any}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   )

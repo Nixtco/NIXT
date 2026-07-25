@@ -170,6 +170,35 @@ export default function SpaceremitCheckout({
       // Clean up the hash without reloading the page
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
+
+    // Check if payment code is in URL (after SpaceRemit redirect)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentCode = urlParams.get('SP_payment_code');
+    
+    if (paymentCode) {
+      console.log('✅ Payment code found in URL:', paymentCode);
+      // Trigger verification immediately
+      void verifyPaymentRef.current(paymentCode);
+      
+      // Clean URL by removing all SpaceRemit parameters but keep plan and amount
+      const cleanUrl = new URL(window.location.href);
+      const plan = cleanUrl.searchParams.get('plan');
+      const originalAmount = cleanUrl.searchParams.get('amount');
+      
+      // Remove all parameters
+      cleanUrl.search = '';
+      
+      // Re-add only plan (amount from SpaceRemit might be different format)
+      if (plan) {
+        cleanUrl.searchParams.set('plan', plan);
+        if (originalAmount && !originalAmount.includes('.')) {
+          // If original amount was without decimals, keep it that way
+          cleanUrl.searchParams.set('amount', originalAmount);
+        }
+      }
+      
+      window.history.replaceState(null, '', cleanUrl.toString());
+    }
   }, []);
 
   useEffect(() => {

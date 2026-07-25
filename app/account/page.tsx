@@ -60,7 +60,7 @@ export default function AccountPage() {
         } finally {
             setActionLoading(null);
         }
-    }; 
+    };  
 
     // Format date
     const formatDate = (dateString?: string) => {

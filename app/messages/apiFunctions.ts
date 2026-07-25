@@ -102,6 +102,22 @@ export interface AdminStatsResponse {
   data: AdminStats | null
 }
 
+export interface AvailableUser {
+  id: string
+  email: string
+  display_name: string | null
+  first_name: string | null
+  last_name: string | null
+  avatar_url: string | null
+  role: string
+  last_seen_at?: string | null
+}
+
+export interface AvailableUsersResponse {
+  success: boolean
+  data: AvailableUser[]
+}
+
 export interface CreateMessageParams {
   conversation_id: string
   text: string
@@ -119,8 +135,8 @@ export interface GetConversationsParams {
 }
 
 export interface CreateConversationParams {
-  other_user_id: string
-  type: 'general' | 'project'
+  other_user_id?: string // ✅ اختياري - يمكن أن يكون null لمحادثات المشاريع
+  type: 'general' | 'project' | 'admin_internal'
   project_id?: string
 }
 
@@ -254,7 +270,7 @@ export async function getConversationById(conversationId: string): Promise<Conve
  * Create or get conversation
  */
 export async function getOrCreateConversation(params: CreateConversationParams): Promise<ConversationResponse> {
-  return apiCall<ConversationResponse>(`${BASE_PATH}/conversations`, {
+  return apiCall<ConversationResponse>(`${BASE_PATH}/conversations/get-or-create`, {
     method: 'POST',
     body: JSON.stringify(params)
   })
@@ -280,6 +296,29 @@ export async function updateConversationStatus(
  */
 export async function getAdminMessageStats(): Promise<AdminStatsResponse> {
   return apiCall<AdminStatsResponse>(`${BASE_PATH}/conversations/admin/stats`)
+}
+
+/**
+ * الحصول على قائمة المستخدمين المتاحين للمحادثة
+ * Get available users for chat
+ */
+export async function getAvailableUsers(): Promise<AvailableUsersResponse> {
+  return apiCall<AvailableUsersResponse>(`${BASE_PATH}/users/chat/available`)
+}
+
+/**
+ * الحصول على قائمة الإداريين مع حالة المحادثة
+ * Get admins list with conversation status
+ */
+export async function getAdminsWithConversationStatus(): Promise<{
+  success: boolean;
+  data: {
+    admin: AvailableUser;
+    conversation: Conversation | null;
+    hasConversation: boolean;
+  }[];
+}> {
+  return apiCall(`${BASE_PATH}/conversations/admin/admins-list`)
 }
 
 /**

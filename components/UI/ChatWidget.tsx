@@ -15,10 +15,16 @@ import {
   getOrCreateConversation,
   updateMessageStatus,
   getAdminMessageStats,
+  getAvailableUsers,
+  getAdminsWithConversationStatus,
   type Conversation,
   type Message as APIMessage,
-  type AdminStats
+  type AdminStats,
+  type AvailableUser,
+  type ConversationResponse
 } from '@/app/messages/apiFunctions'
+import { apiCall } from '@/hooks/useApi'
+import { useWebSocket, type IncomingMessage } from '@/hooks/useWebSocket'
 
 export interface ChatWidgetProps {
   mode?: 'user' | 'admin'
@@ -38,7 +44,9 @@ interface Message {
   sender: 'sent' | 'received'
   time: string
   senderName?: string
+  senderType?: 'admin' | 'client'  // ✅ إضافة نوع المرسل الفعلي
   attachment?: MessageAttachment
+  status?: 'sent' | 'delivered' | 'read'
 }
 
 type ChatType = 'general' | 'project'
@@ -87,6 +95,7 @@ function createAdminSeedMessages(
         sender: 'received',
         time: new Date(Date.now() - 3600000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         senderName: name,
+        senderType: 'client', // ✅ رسالة من العميل
       },
       {
         id: 1002,
@@ -96,6 +105,7 @@ function createAdminSeedMessages(
         sender: 'received',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         senderName: name,
+        senderType: 'client', // ✅ رسالة من العميل
       },
     ]
     unread[id] = 2
@@ -112,6 +122,7 @@ function createAdminSeedMessages(
       sender: 'received',
       time: new Date(Date.now() - 7200000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       senderName: name,
+      senderType: 'client', // ✅ رسالة من العميل
     }]
     unread[id] = 1
   }
@@ -127,6 +138,7 @@ function createAdminSeedMessages(
       sender: 'received',
       time: new Date(Date.now() - 1800000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       senderName: name,
+      senderType: 'client', // ✅ رسالة من العميل
     }]
     unread[id] = 1
   }
@@ -135,10 +147,11 @@ function createAdminSeedMessages(
 }
 
 const GENERAL_CHAT_ID = 'general'
+const BASE_PATH = '/api/v1'
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024
-const MAX_FILE_SIZE = 25 * 1024 * 1024
+const MAX_VIDEO_SIZE = 10 * 1024 * 1024 // تقليل لـ 10MB متوافق مع S3
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // تقليل لـ 10MB متوافق مع S3
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -155,6 +168,7 @@ function getWelcomeMessage(language: string): Message {
     sender: 'received',
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     senderName: language === 'ar' ? 'الدعم' : 'Support',
+    senderType: 'admin', // ✅ الرسالة الترحيبية من الدعم (admin)
   }
 }
 
@@ -169,9 +183,36 @@ function getStatusLabel(status: Project['status'], language: string): string {
   return language === 'ar' ? map[status].ar : map[status].en
 }
 
+// دالة للحصول على userId من الـ token
+function getCurrentUserId(): string | null {
+  if (typeof window === 'undefined') return null
+  
+  const token = localStorage.getItem('token')
+  if (!token) {
+    console.warn('⚠️ [getCurrentUserId] لا يوجد token في localStorage')
+    return null
+  }
+  
+  try {
+    // فك تشفير JWT token (الجزء الثاني هو payload)
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    console.log('🔑 [getCurrentUserId] Token payload:', payload)
+    
+    // تجربة أسماء مختلفة للـ userId
+    const userId = payload.userID || payload.userId || payload.id || payload.sub || null
+    console.log('✅ [getCurrentUserId] userId المستخرج:', userId)
+    
+    return userId
+  } catch (error) {
+    console.error('❌ [getCurrentUserId] فشل فك تشفير token:', error)
+    return null
+  }
+}
+
 export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidgetProps) {
   const isAdminMode = mode === 'admin'
   const { language, dir } = useLanguage()
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const emojiBtnRef = useRef<HTMLButtonElement>(null)
@@ -180,6 +221,11 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   const attachInputRef = useRef<HTMLInputElement>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [adminClients, setAdminClients] = useState<APIUser[]>([])
+  const [adminsWithConversations, setAdminsWithConversations] = useState<{
+    admin: AvailableUser;
+    conversation: Conversation | null;
+    hasConversation: boolean;
+  }[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [conversationsLoading, setConversationsLoading] = useState(false)
 
@@ -191,9 +237,16 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
 
   // UI state
-  const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>(
-    mode === 'admin' ? {} : { [GENERAL_CHAT_ID]: [getWelcomeMessage(language)] }
-  )
+  const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>(() => {
+    // ✅ FIX: تهيئة رسالة ترحيبية للمستخدمين الجدد
+    if (mode === 'user') {
+      const initialMessages: Record<string, Message[]> = {
+        [GENERAL_CHAT_ID]: [getWelcomeMessage('en')]
+      }
+      return initialMessages
+    }
+    return {} // للـ admin mode: لا توجد رسائل أولية
+  })
   const [activeChatId, setActiveChatId] = useState(GENERAL_CHAT_ID)
   const [typingChats, setTypingChats] = useState<Record<string, boolean>>({})
   const [inputValue, setInputValue] = useState('')
@@ -204,35 +257,278 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSmallScreen, setIsSmallScreen] = useState(false)
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true)
+  const [uploadingFile, setUploadingFile] = useState(false) // حالة رفع الملف
+  const [selectedFilePreview, setSelectedFilePreview] = useState<{
+    file: File;
+    type: MessageAttachment['type'];
+    previewUrl?: string;
+  } | null>(null) // معاينة الملف قبل الإرسال
+  const [isDragging, setIsDragging] = useState(false) // حالة السحب والإفلات
+
+  // WebSocket Integration - استخدام useMemo للـ handlers
+  const wsHandlers = useMemo(() => ({
+    onAuthSuccess: (data: any) => {
+      console.log('✅ WebSocket authenticated:', data)
+    },
+    onAuthFailed: (error: any) => {
+      console.error('❌ WebSocket auth failed:', error)
+    },
+    onMessageSent: (message: IncomingMessage, conversationId: string) => {
+      console.log('💬 [RECEIVE] رسالة جديدة عبر WebSocket:', message)
+      console.log('💬 [RECEIVE] Conversation ID:', conversationId)
+      console.log('💬 [RECEIVE] activeChatId:', activeChatId)
+      console.log('💬 [RECEIVE] activeConversationId:', activeConversationId)
+      console.log('💬 [RECEIVE] currentUserId:', currentUserId)
+      console.log('💬 [RECEIVE] message.sender_id:', message.sender_id)
+      
+      // ✅ FIX: تحديد sender بناءً على المستخدم الحالي، وليس النوع
+      // إذا كان المرسل هو المستخدم الحالي -> sent
+      // إذا كان المرسل شخص آخر -> received
+      const isMyMessage = currentUserId && message.sender_id === currentUserId
+      
+      // تحويل الرسالة إلى صيغة UI
+      const newMessage: Message = {
+        id: message.id,
+        text: message.text,
+        sender: isMyMessage ? 'sent' : 'received',
+        time: new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderName: message.sender?.display_name || message.sender?.email,
+        senderType: message.sender_type === 'admin' ? 'admin' : 'client', // ✅ إضافة نوع المرسل الفعلي
+        attachment: message.attachment ? {
+          type: message.attachment.type,
+          url: message.attachment.url,
+          name: message.attachment.name,
+          size: message.attachment.size || 0
+        } : undefined,
+        status: message.status
+      }
+      
+      console.log('💬 [RECEIVE] رسالة محولة:', newMessage)
+      console.log('💬 [RECEIVE] isMyMessage:', isMyMessage)
+
+      // تحديث الرسائل في الواجهة
+      setChatMessages(prev => {
+        // إذا كانت الرسالة للمحادثة النشطة، استخدم activeChatId
+        let targetChatId = activeChatId
+        
+        if (conversationId !== activeConversationId) {
+          // إذا كانت لمحادثة أخرى، استخدم conversationId مباشرة
+          targetChatId = conversationId
+        }
+        
+        const existing = prev[targetChatId] || []
+        
+        // تحقق من عدم وجود الرسالة مسبقاً
+        if (existing.find(m => m.id === message.id)) {
+          console.log('💬 [RECEIVE] الرسالة موجودة مسبقاً، تخطي')
+          return prev
+        }
+        
+        console.log(`💬 [RECEIVE] إضافة الرسالة إلى ${targetChatId}`)
+        
+        return {
+          ...prev,
+          [targetChatId]: [...existing, newMessage]
+        }
+      })
+
+      // تحديث عداد الرسائل غير المقروءة إذا كانت الرسالة من الطرف الآخر
+      if (!isMyMessage) {
+        // استخدام الـ chatId المناسب
+        const chatId = conversationId === activeConversationId ? activeChatId : conversationId
+        setUnreadCounts(prev => ({
+          ...prev,
+          [chatId]: (prev[chatId] || 0) + 1
+        }))
+      }
+    },
+    onTypingStart: (data: any) => {
+      console.log('⌨️ يكتب الآن:', data)
+      setTypingChats(prev => ({ ...prev, [data.conversationId]: true }))
+    },
+    onTypingStop: (data: any) => {
+      console.log('⌨️ توقف عن الكتابة:', data)
+      setTypingChats(prev => ({ ...prev, [data.conversationId]: false }))
+    },
+    onMessageDelivered: (data: any) => {
+      console.log('✓ تم توصيل الرسالة:', data)
+      // تحديث حالة الرسالة في UI
+      setChatMessages(prev => {
+        const convId = data.conversationId
+        const msgs = prev[convId]
+        if (!msgs) return prev
+        
+        return {
+          ...prev,
+          [convId]: msgs.map(msg => 
+            msg.id === data.messageId 
+              ? { ...msg, status: 'delivered' as const }
+              : msg
+          )
+        }
+      })
+    },
+    onMessageRead: (data: any) => {
+      console.log('✓✓ تم قراءة الرسالة:', data)
+      // تحديث حالة الرسالة في UI
+      setChatMessages(prev => {
+        const convId = data.conversationId
+        const msgs = prev[convId]
+        if (!msgs) return prev
+        
+        return {
+          ...prev,
+          [convId]: msgs.map(msg => 
+            msg.id === data.messageId 
+              ? { ...msg, status: 'read' as const }
+              : msg
+          )
+        }
+      })
+    },
+    onUserOnline: (data: any) => {
+      console.log('🟢 المستخدم متصل:', data)
+    },
+    onUserOffline: (data: any) => {
+      console.log('🔴 المستخدم غير متصل:', data)
+    },
+    onConversationJoined: (data: any, conversationId: string) => {
+      console.log('✅ تم الانضمام للمحادثة:', conversationId)
+    },
+    onError: (error: any) => {
+      console.error('❌ خطأ WebSocket:', error)
+    }
+  }), [activeChatId, activeConversationId, currentUserId])
+
+  const {
+    isConnected: wsConnected,
+    connectionStatus: wsStatus,
+    sendMessage: wsSendMessage,
+    sendTypingStart: wsSendTypingStart,
+    sendTypingStop: wsSendTypingStop,
+    joinConversation: wsJoinConversation,
+    leaveConversation: wsLeaveConversation,
+    updateMessageStatus: wsUpdateMessageStatus,
+  } = useWebSocket({
+    enabled: true,
+    handlers: wsHandlers
+  })
 
   const generalChatName = language === 'ar' ? 'استفسار عام' : 'General Inquiry'
   const generalChatSubtitle = language === 'ar' ? 'اسأل عن أي شيء' : 'Ask about anything'
 
+  // جلب userId الحالي من token
+  useEffect(() => {
+    const userId = getCurrentUserId()
+    setCurrentUserId(userId)
+  }, [])
+
   const chats = useMemo<ChatItem[]>(() => {
     if (isAdminMode) {
+      console.log('🔍 [CHATS] بناء قائمة المحادثات...')
+      console.log('🔍 [CHATS] currentUserId:', currentUserId)
+      console.log('🔍 [CHATS] conversations:', conversations)
+      
       const items: ChatItem[] = conversations.map((conv) => {
-        const clientName = conv.client?.display_name
-          || `${conv.client?.first_name || ''} ${conv.client?.last_name || ''}`.trim()
-          || conv.client?.email
-          || (language === 'ar' ? 'عميل' : 'Client')
+        // تحديد الطرف الآخر في المحادثة
+        let otherUser: Conversation['client'] | Conversation['admin'] | null = null
+        let otherUserId: string | null = null
+        
+        console.log(`🔍 [CHAT ${conv.id}] client_id=${conv.client_id}, admin_id=${conv.admin_id}, currentUserId=${currentUserId}`)
+        
+        // إذا كان المستخدم الحالي هو الـ client_id، الطرف الآخر هو admin
+        if (currentUserId && conv.client_id === currentUserId) {
+          otherUser = conv.admin || null
+          otherUserId = conv.admin_id
+          console.log(`✅ [CHAT ${conv.id}] المستخدم الحالي هو client، الطرف الآخر هو admin:`, otherUser)
+        }
+        // إذا كان المستخدم الحالي هو الـ admin_id، الطرف الآخر هو client
+        else if (currentUserId && conv.admin_id === currentUserId) {
+          otherUser = conv.client || null
+          otherUserId = conv.client_id
+          console.log(`✅ [CHAT ${conv.id}] المستخدم الحالي هو admin، الطرف الآخر هو client:`, otherUser)
+        }
+        // fallback: عرض الـ client
+        else {
+          otherUser = conv.client || null
+          otherUserId = conv.client_id
+          console.log(`⚠️ [CHAT ${conv.id}] fallback: عرض client:`, otherUser)
+        }
+
+        // بناء اسم المستخدم الآخر مع التأكد من عدم كون الاسم "واحد"
+        let otherUserName = otherUser?.display_name?.trim()
+        
+        // إذا لم يكن هناك display_name، جرب first_name + last_name
+        if (!otherUserName) {
+          const fullName = `${otherUser?.first_name || ''} ${otherUser?.last_name || ''}`.trim()
+          if (fullName && fullName !== 'واحد' && fullName !== 'One') {
+            otherUserName = fullName
+          }
+        }
+        
+        // إذا ما زال فارغاً أو يساوي "واحد"، استخدم البريد الإلكتروني
+        if (!otherUserName || otherUserName === 'واحد' || otherUserName === 'One') {
+          otherUserName = otherUser?.email || (language === 'ar' ? 'مستخدم' : 'User')
+        }
 
         const statusSubtitle = conv.type === 'project'
           ? (conv.project?.name || (language === 'ar' ? 'محادثة مشروع' : 'Project Conversation'))
-          : (language === 'ar' ? 'استفسار عام' : 'General Inquiry')
+          : (otherUser?.email || (language === 'ar' ? 'استفسار عام' : 'General Inquiry'))
 
-        return {
+        const chatItem = {
           id: conv.id,
           type: conv.type,
-          name: conv.type === 'project' ? (conv.project?.name || statusSubtitle) : clientName,
+          name: conv.type === 'project' ? (conv.project?.name || statusSubtitle) : otherUserName,
           subtitle: statusSubtitle,
           projectId: conv.project_id || undefined,
           clientId: conv.client_id,
-          clientName,
-          clientEmail: conv.client?.email || undefined,
+          clientName: otherUserName,
+          clientEmail: otherUser?.email || undefined,
+          otherUserId: otherUserId || undefined,
         }
+        
+        console.log(`✅ [CHAT ${conv.id}] ChatItem النهائي:`, chatItem)
+        
+        return chatItem
       })
 
-      return items.sort((a, b) => (unreadCounts[b.id] ?? 0) - (unreadCounts[a.id] ?? 0))
+      // إضافة الإداريين الذين ليس لديهم محادثات فقط
+      // فلترة الإداريين الذين لديهم محادثات موجودة مسبقاً
+      const adminItems: ChatItem[] = adminsWithConversations
+        .filter((item) => !item.hasConversation) // فقط الإداريين بدون محادثات
+        .map((item) => {
+          // بناء اسم الإداري مع التأكد من عدم كون الاسم "واحد"
+          let adminName = item.admin.display_name?.trim()
+          
+          // إذا لم يكن هناك display_name، جرب first_name + last_name
+          if (!adminName) {
+            const fullName = `${item.admin.first_name || ''} ${item.admin.last_name || ''}`.trim()
+            if (fullName && fullName !== 'واحد' && fullName !== 'One') {
+              adminName = fullName
+            }
+          }
+          
+          // إذا ما زال فارغاً أو يساوي "واحد"، استخدم البريد الإلكتروني
+          if (!adminName || adminName === 'واحد' || adminName === 'One') {
+            adminName = item.admin.email || (language === 'ar' ? 'إداري' : 'Admin')
+          }
+
+          return {
+            id: `admin-${item.admin.id}`, // placeholder ID
+            type: 'general' as ChatType,
+            name: adminName,
+            subtitle: item.admin.email || (language === 'ar' ? 'إداري' : 'Admin'),
+            clientId: undefined,
+            otherUserId: item.admin.id,
+            clientName: adminName,
+            clientEmail: item.admin.email || undefined,
+          }
+        })
+
+      // دمج المحادثات العادية والإداريين بدون محادثات
+      const allItems = [...items, ...adminItems]
+
+      return allItems.sort((a, b) => (unreadCounts[b.id] ?? 0) - (unreadCounts[a.id] ?? 0))
     }
 
     const existingGeneral = conversations.find((c) => c.type === 'general')
@@ -257,7 +553,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
         name: project.name,
         subtitle: getStatusLabel(project.status, language),
         projectId: project.id,
-        otherUserId: project.team?.[0],
+        otherUserId: undefined, // ✅ لا نحدد admin - سيكون admin_id = null
       }
     })
 
@@ -278,7 +574,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
         }
 
     return [generalChat, ...projectChats]
-  }, [isAdminMode, conversations, projects, language, generalChatName, generalChatSubtitle, unreadCounts])
+  }, [isAdminMode, conversations, projects, language, generalChatName, generalChatSubtitle, unreadCounts, adminsWithConversations, currentUserId])
 
   const visibleChats = useMemo(() => {
     let list = chats
@@ -314,17 +610,30 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   const activeMessages = chatMessages[activeChatId] ?? []
   const isTyping = typingChats[activeChatId] ?? false
 
+  // تسجيل معلومات التصحيح
+  useEffect(() => {
+    console.log('🔍 معلومات التصحيح:')
+    console.log('  - activeChatId:', activeChatId)
+    console.log('  - activeConversationId:', activeConversationId)
+    console.log('  - activeChat:', activeChat)
+    console.log('  - activeChat?.clientName:', activeChat?.clientName)
+    console.log('  - activeChat?.clientEmail:', activeChat?.clientEmail)
+    console.log('  - activeMessages.length:', activeMessages.length)
+    console.log('  - chatMessages keys:', Object.keys(chatMessages))
+  }, [activeChatId, activeConversationId, activeChat, activeMessages.length, chatMessages])
+
   useEffect(() => {
     async function fetchProjects() {
       try {
         setProjectsLoading(true)
         if (isAdminMode) {
+          // استخدام API الصحيح للحصول على المستخدمين المتاحين للمحادثة
           const [usersRes, projectsRes] = await Promise.all([
-            getAllUsers({ limit: 200, offset: 0 }),
+            getAvailableUsers(),
             getAllProjects({ limit: 200, offset: 0 }),
           ])
           if (usersRes.success && usersRes.data) {
-            setAdminClients(usersRes.data)
+            setAdminClients(usersRes.data as unknown as APIUser[])
           }
           if (projectsRes.success && projectsRes.data) {
             setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : [projectsRes.data])
@@ -346,6 +655,26 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     }
 
     fetchProjects()
+  }, [isAdminMode])
+
+  // جلب قائمة الإداريين (للإداريين فقط)
+  useEffect(() => {
+    async function loadAdmins() {
+      if (!isAdminMode) return;
+      
+      try {
+        console.log('📥 جلب قائمة الإداريين...')
+        const res = await getAdminsWithConversationStatus()
+        if (res.success && res.data) {
+          console.log('✅ تم جلب', res.data.length, 'إداري')
+          setAdminsWithConversations(res.data)
+        }
+      } catch (err) {
+        console.error('❌ فشل جلب قائمة الإداريين:', err)
+      }
+    }
+
+    loadAdmins()
   }, [isAdminMode])
 
   useEffect(() => {
@@ -379,6 +708,11 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
             if (res.data.length > 0) {
               setActiveChatId((prev) => prev === GENERAL_CHAT_ID ? res.data[0].id : prev)
               setActiveConversationId((prev) => prev || res.data[0].id)
+            } else {
+              // ✅ FIX: المستخدم الجديد - سيتم إنشاء محادثة General Inquiry عند إرسال أول رسالة
+              console.log('📝 لا توجد محادثات للمستخدم الجديد')
+              console.log('💡 محادثة General Inquiry ستُنشأ تلقائياً عند إرسال أول رسالة')
+              // لا نفعل شيء هنا - سيتم الإنشاء في sendMessage()
             }
           }
         }
@@ -392,46 +726,126 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     if (isAdminMode || !isAdminMode) {
       loadConversations()
     }
-  }, [isAdminMode])
+  }, [isAdminMode, wsConnected, wsJoinConversation])
 
   // تحميل الرسائل عند تغيير المحادثة النشطة
   useEffect(() => {
     async function loadMessages() {
-      if (!activeConversationId) return
+      if (!activeConversationId) {
+        console.log('⚠️ لا يوجد activeConversationId')
+        
+        // ✅ FIX: إذا لم يكن هناك محادثة، عرض رسالة ترحيبية للمستخدم الجديد
+        if (!isAdminMode && activeChatId === GENERAL_CHAT_ID) {
+          console.log('👋 عرض رسالة ترحيبية للمستخدم الجديد')
+          setChatMessages(prev => ({
+            ...prev,
+            [GENERAL_CHAT_ID]: [getWelcomeMessage(language)]
+          }))
+        }
+        
+        return
+      }
 
       try {
+        console.log('📥 بدء تحميل الرسائل للمحادثة:', activeConversationId)
         setMessagesLoading(true)
+        
+        // الانضمام للمحادثة عبر WebSocket أولاً
+        if (wsConnected) {
+          console.log('🔌 الانضمام للمحادثة عبر WebSocket:', activeConversationId)
+          wsJoinConversation(activeConversationId)
+          // إعطاء وقت قصير للـ subscription
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+        
         const res = await getConversationMessages(activeConversationId, { limit: 50, offset: 0 })
+        console.log('📨 استجابة API للرسائل:', res)
+        
         if (res.success && res.data) {
+          console.log(`✅ تم تحميل ${res.data.length} رسالة`)
+          console.log('📋 بيانات الرسائل:', res.data)
+          
           // تحويل رسائل API إلى صيغة الـ UI
-          const convertedMessages: Message[] = res.data.map(msg => ({
-            id: msg.id,
-            text: msg.text,
-            sender: isAdminMode
-              ? (msg.sender_type === 'admin' ? 'sent' : 'received')
-              : (msg.sender_type === 'client' ? 'sent' : 'received'),
-            time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            senderName: msg.sender?.display_name || msg.sender?.email,
-            attachment: msg.attachment || undefined
-          }))
-          setChatMessages(prev => ({ ...prev, [activeConversationId]: convertedMessages }))
+          const convertedMessages: Message[] = res.data.map(msg => {
+            // ✅ FIX: تحديد sender بناءً على المستخدم الحالي، وليس النوع
+            const isMyMessage = currentUserId && msg.sender_id === currentUserId
+            const sender = isMyMessage ? 'sent' : 'received'
+            
+            console.log(`📝 رسالة ${msg.id}: sender_id=${msg.sender_id}, currentUserId=${currentUserId}, isMyMessage=${isMyMessage}, converted=${sender}`)
+            
+            return {
+              id: msg.id,
+              text: msg.text,
+              sender,
+              time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              senderName: msg.sender?.display_name || msg.sender?.email,
+              senderType: msg.sender_type === 'admin' ? 'admin' : 'client', // ✅ إضافة نوع المرسل الفعلي
+              attachment: msg.attachment || undefined,
+              status: msg.status
+            }
+          })
+          
+          console.log('💾 حفظ الرسائل في activeChatId:', activeChatId)
+          console.log('💾 حفظ الرسائل في activeConversationId:', activeConversationId)
+          console.log('💾 الرسائل المحولة:', convertedMessages)
+          
+          // CRITICAL FIX: استخدام activeChatId فقط لأنه هو المستخدم في العرض
+          setChatMessages(prev => {
+            const updated = { 
+              ...prev,
+              [activeChatId]: convertedMessages
+            }
+            console.log('💾 حالة chatMessages المحدثة:', updated)
+            return updated
+          })
           
           await markConversationAsRead(activeConversationId)
+          
+          // تحديث عداد الرسائل غير المقروءة باستخدام activeChatId
+          setUnreadCounts(prev => ({ ...prev, [activeChatId]: 0 }))
+          
+          // تحديث حالة الرسائل غير المقروءة عبر WebSocket
+          if (wsConnected && res.data.length > 0) {
+            // إرسال تحديث لجميع الرسائل غير المقروءة من الطرف الآخر
+            res.data.forEach(msg => {
+              const isMyMessage = currentUserId && msg.sender_id === currentUserId
+              if (msg.status !== 'read' && !isMyMessage) {
+                wsUpdateMessageStatus(msg.id, activeConversationId, 'read')
+              }
+            })
+          }
+        } else {
+          console.log('⚠️ لا توجد رسائل في الاستجابة')
+          // حتى لو لم تكن هناك رسائل، قم بتهيئة المصفوفة
+          setChatMessages(prev => ({
+            ...prev,
+            [activeChatId]: []
+          }))
         }
       } catch (err) {
-        console.error('Failed to load messages:', err)
+        console.error('❌ فشل تحميل الرسائل:', err)
+        // في حالة الخطأ، قم بتهيئة المصفوفة
+        setChatMessages(prev => ({
+          ...prev,
+          [activeChatId]: []
+        }))
       } finally {
         setMessagesLoading(false)
       }
     }
 
     loadMessages()
-  }, [activeConversationId, isAdminMode])
+  }, [activeConversationId, activeChatId, isAdminMode, wsConnected, wsJoinConversation, wsUpdateMessageStatus, currentUserId, language])
 
   useEffect(() => {
     if (isAdminMode) return
     setChatMessages((prev) => {
-      if (prev[GENERAL_CHAT_ID]) return prev
+      const currentMessages = prev[GENERAL_CHAT_ID] || []
+      
+      // إذا كانت هناك رسائل حقيقية (أكثر من الرسالة الترحيبية)، لا تغير شيء
+      if (currentMessages.length > 1) return prev
+      
+      // إذا لم تكن هناك رسائل أو رسالة واحدة فقط (الترحيبية)، حدّث الرسالة الترحيبية
       return { ...prev, [GENERAL_CHAT_ID]: [getWelcomeMessage(language)] }
     })
   }, [language, isAdminMode])
@@ -529,99 +943,451 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
             sender: 'received',
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             senderName: language === 'ar' ? 'الدعم' : 'Support',
+            senderType: 'admin', // ✅ رد تلقائي من الدعم (admin)
           },
         ],
       }))
     }, 2500)
   }, [language])
 
-  const sendMessage = useCallback((text: string, attachment?: MessageAttachment) => {
+  const sendMessage = useCallback(async (text: string, attachment?: MessageAttachment) => {
     if (!text.trim() && !attachment) return
-    if (!activeConversationId) return
+
+    console.log('📤 [SEND] محاولة إرسال رسالة:', {
+      text: text.trim(),
+      activeConversationId,
+      activeChatId,
+      wsConnected,
+      hasAttachment: !!attachment
+    })
 
     setIsSubmitting(true)
     
-    // أضف الرسالة محلياً أولاً
-    const chatId = activeChatId
-    const newMessage: Message = {
-      id: Date.now(),
-      text: text.trim(),
-      sender: 'sent',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      senderName: isAdminMode
+    // ✅ FIX: إذا لم يكن هناك activeConversationId، قم بإنشائه أولاً
+    let conversationId = activeConversationId
+    
+    if (!conversationId) {
+      console.log('📝 [SEND] لا يوجد activeConversationId، سيتم إنشاء محادثة General Inquiry تلقائياً...')
+      
+      try {
+        // 🎯 للمستخدمين العاديين: إنشاء محادثة general بدون admin محدد
+        // سيتم توجيهها لجميع الـ admins تلقائياً
+        if (!isAdminMode) {
+          console.log('📞 [SEND] إنشاء محادثة General Inquiry للمستخدم الجديد')
+          
+          // إنشاء المحادثة مباشرة عبر API
+          const convRes = await apiCall<ConversationResponse>(`${BASE_PATH}/conversations`, {
+            method: 'POST',
+            body: JSON.stringify({
+              type: 'general'
+              // لا نرسل other_user_id - المحادثة ستكون عامة لجميع الـ admins
+            })
+          })
+          
+          if (convRes && convRes.success && convRes.data) {
+            console.log('✅ [SEND] تم إنشاء محادثة:', convRes.data.id)
+            conversationId = convRes.data.id
+            setActiveConversationId(convRes.data.id)
+            setConversations(prev => [...prev, convRes.data!])
+            setActiveChatId(convRes.data.id)
+            
+            // الانضمام للمحادثة عبر WebSocket
+            if (wsConnected) {
+              wsJoinConversation(convRes.data.id)
+              // إعطاء وقت قصير للـ subscription
+              await new Promise(resolve => setTimeout(resolve, 200))
+            }
+          } else {
+            console.error('❌ [SEND] فشل إنشاء محادثة:', convRes)
+            setIsSubmitting(false)
+            return
+          }
+        } else {
+          // الإداريين: يجب أن يكون لديهم conversationId دائماً
+          console.error('❌ [SEND] لا يوجد activeConversationId للإداري')
+          setIsSubmitting(false)
+          return
+        }
+      } catch (err) {
+        console.error('❌ [SEND] فشل إنشاء محادثة:', err)
+        setIsSubmitting(false)
+        return
+      }
+    }
+    
+    // إرسال الرسالة عبر WebSocket أولاً (سيتم broadcast تلقائياً من Backend)
+    if (wsConnected) {
+      console.log('📤 [SEND] إرسال الرسالة عبر WebSocket')
+      wsSendMessage(conversationId, text.trim(), attachment)
+      
+      // ⚠️ لا نضيف الرسالة محلياً هنا! سننتظر رد message:sent من السيرفر
+      // سيتم إضافتها تلقائياً في onMessageSent handler
+      
+      setInputValue('')
+      setFileError(null)
+      setIsSubmitting(false)
+    } else {
+      // Fallback: استخدام REST API إذا كان WebSocket غير متصل
+      console.warn('⚠️ [SEND] WebSocket غير متصل، استخدام REST API')
+      
+      const chatId = activeChatId
+      const tempId = `temp-${Date.now()}`
+      const newMessage: Message = {
+        id: tempId,
+        text: text.trim(),
+        sender: 'sent', // دائماً sent لأنها رسالة من المستخدم الحالي
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderName: isAdminMode
+          ? (language === 'ar' ? 'الدعم' : 'Support')
+          : (language === 'ar' ? 'أنت' : 'You'),
+        senderType: isAdminMode ? 'admin' : 'client', // ✅ تحديد نوع المرسل
+        attachment,
+        status: 'sent'
+      }
+
+      // إضافة الرسالة محلياً مؤقتاً
+      setChatMessages((prev) => ({
+        ...prev,
+        [chatId]: [...(prev[chatId] ?? []), newMessage],
+      }))
+      setInputValue('')
+      setFileError(null)
+
+      // إرسال الرسالة إلى API
+      createMessage({
+        conversation_id: conversationId,
+        text: text.trim(),
+        attachment: attachment || undefined
+      }).then((result) => {
+        if (result.success && result.data) {
+          // استبدال الرسالة المؤقتة بالرسالة الحقيقية
+          setChatMessages((prev) => {
+            const messages = prev[chatId] || []
+            const updatedMessages = messages.map(msg =>
+              msg.id === tempId
+                ? {
+                    ...msg,
+                    id: result.data!.id,
+                    status: result.data!.status as 'sent' | 'delivered' | 'read'
+                  }
+                : msg
+            )
+            return {
+              ...prev,
+              [chatId]: updatedMessages
+            }
+          })
+        } else {
+          // في حالة الفشل، إزالة الرسالة المؤقتة
+          setChatMessages((prev) => ({
+            ...prev,
+            [chatId]: (prev[chatId] || []).filter(msg => msg.id !== tempId)
+          }))
+        }
+        
+        if (isAdminMode) {
+          setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
+        }
+      }).catch((err) => {
+        console.error('❌ [SEND] فشل إرسال الرسالة عبر REST API:', err)
+        // إزالة الرسالة المؤقتة في حالة الفشل
+        setChatMessages((prev) => ({
+          ...prev,
+          [chatId]: (prev[chatId] || []).filter(msg => msg.id !== tempId)
+        }))
+      }).finally(() => {
+        setIsSubmitting(false)
+      })
+    }
+  }, [activeChatId, language, isAdminMode, activeConversationId, wsConnected, wsSendMessage, wsJoinConversation])
+
+  // معالج الكتابة - إرسال إشارة "يكتب الآن"
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  /**
+   * رفع ملف إلى S3 عبر REST API
+   */
+  const uploadFileToS3 = useCallback(async (file: File): Promise<MessageAttachment | null> => {
+    try {
+      setUploadingFile(true)
+      setFileError(null)
+      
+      console.log('📤 [UPLOAD] بدء رفع الملف:', file.name, file.size)
+      
+      // إنشاء FormData
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      // رفع الملف
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      if (!token) {
+        throw new Error('لا يوجد token للمصادقة')
+      }
+      
+      const response = await fetch(`${API_URL}/messages/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'فشل رفع الملف')
+      }
+      
+      const result = await response.json()
+      console.log('✅ [UPLOAD] تم رفع الملف بنجاح:', result.data)
+      
+      return result.data as MessageAttachment
+    } catch (error: any) {
+      console.error('❌ [UPLOAD] فشل رفع الملف:', error)
+      setFileError(error.message || (language === 'ar' ? 'فشل رفع الملف' : 'File upload failed'))
+      return null
+    } finally {
+      setUploadingFile(false)
+    }
+  }, [language])
+  
+  const handleInputChange = useCallback((value: string) => {
+    setInputValue(value)
+    
+    // إرسال إشارة بدء الكتابة
+    if (activeConversationId && wsConnected && value.trim()) {
+      const displayName = isAdminMode 
         ? (language === 'ar' ? 'الدعم' : 'Support')
-        : (language === 'ar' ? 'أنت' : 'You'),
-      attachment,
+        : undefined
+      
+      wsSendTypingStart(activeConversationId, displayName)
+      
+      // إلغاء المؤقت السابق
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      
+      // إرسال إشارة إيقاف الكتابة بعد 3 ثواني من عدم الكتابة
+      typingTimeoutRef.current = setTimeout(() => {
+        if (activeConversationId && wsConnected) {
+          wsSendTypingStop(activeConversationId)
+        }
+      }, 3000)
+    }
+  }, [activeConversationId, wsConnected, wsSendTypingStart, wsSendTypingStop, isAdminMode, language])
+
+  // 🧪 دالة اختبار REST API
+  const testRestAPI = useCallback(async () => {
+    if (!activeConversationId) {
+      alert('❌ لا توجد محادثة نشطة')
+      console.error('❌ لا يوجد activeConversationId')
+      return
     }
 
-    setChatMessages((prev) => ({
-      ...prev,
-      [chatId]: [...(prev[chatId] ?? []), newMessage],
-    }))
-    setInputValue('')
-    setFileError(null)
+    const testMessage = '🧪 اختبار REST API - ' + new Date().toLocaleTimeString('ar-SA')
+    
+    console.log('═══════════════════════════════════════')
+    console.log('🧪 [TEST] بدء اختبار REST API')
+    console.log('Conversation ID:', activeConversationId)
+    console.log('Test Message:', testMessage)
+    console.log('═══════════════════════════════════════')
 
-    // إرسال الرسالة إلى API
-    createMessage({
-      conversation_id: activeConversationId,
-      text: text.trim(),
-      attachment: attachment || undefined
-    }).then(() => {
-      if (isAdminMode) {
-        setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
+    try {
+      const result = await createMessage({
+        conversation_id: activeConversationId,
+        text: testMessage
+      })
+
+      console.log('✅ [TEST] نجح الطلب:', result)
+      
+      if (result.success && result.data) {
+        console.log('✅✅ [TEST] تم حفظ الرسالة بنجاح!')
+        console.log('Message ID:', result.data.id)
+        console.log('Created At:', result.data.created_at)
+        console.log('Sender Type:', result.data.sender_type)
+        
+        alert(
+          `✅ نجح اختبار REST API!\n\n` +
+          `Message ID: ${result.data.id}\n` +
+          `Created: ${new Date(result.data.created_at).toLocaleString('ar-SA')}\n` +
+          `Sender: ${result.data.sender_type}\n\n` +
+          `التشخيص: قاعدة البيانات تعمل ✅\n` +
+          `المشكلة في WebSocket فقط ⚠️`
+        )
+        
+        // إعادة تحميل الرسائل من API
+        const res = await getConversationMessages(activeConversationId, { limit: 50, offset: 0 })
+        if (res.success && res.data) {
+          const convertedMessages: Message[] = res.data.map(msg => {
+            const isMyMessage = currentUserId && msg.sender_id === currentUserId
+            return {
+              id: msg.id,
+              text: msg.text,
+              sender: isMyMessage ? 'sent' : 'received',
+              time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              senderName: msg.sender?.display_name || msg.sender?.email,
+              attachment: msg.attachment ? {
+                type: msg.attachment.type,
+                url: msg.attachment.url,
+                name: msg.attachment.name,
+                size: msg.attachment.size || 0
+              } : undefined,
+              status: msg.status
+            }
+          })
+          
+          setChatMessages(prev => ({
+            ...prev,
+            [activeConversationId]: convertedMessages,
+            [activeChatId]: convertedMessages
+          }))
+        }
+      } else {
+        console.error('❌ [TEST] فشل حفظ الرسالة:', result)
+        alert('❌ فشل الاختبار:\n\n' + JSON.stringify(result, null, 2))
       }
-    }).catch((err) => {
-      console.error('Failed to send message:', err)
-      // يمكن إضافة رسالة خطأ للمستخدم هنا
-    }).finally(() => {
-      setIsSubmitting(false)
-    })
-  }, [activeChatId, language, isAdminMode, activeConversationId])
+    } catch (error: any) {
+      console.error('❌ [TEST] خطأ في الطلب:', error)
+      alert(
+        `❌ خطأ في الاختبار:\n\n` +
+        `${error.message || error}\n\n` +
+        `التشخيص: مشكلة في الاتصال أو الصلاحيات`
+      )
+    }
+    
+    console.log('═══════════════════════════════════════')
+  }, [activeConversationId, activeChatId, isAdminMode])
 
   const handleSelectChat = async (chatId: string) => {
+    console.log('🎯 تم اختيار محادثة:', chatId)
     setActiveChatId(chatId)
     if (isSmallScreen) {
       setIsSidebarExpanded(false)
     }
 
+    // مغادرة المحادثة السابقة
+    if (activeConversationId && wsConnected) {
+      console.log('👋 مغادرة المحادثة السابقة:', activeConversationId)
+      wsLeaveConversation(activeConversationId)
+    }
+
     if (isAdminMode) {
+      console.log('👨‍💼 وضع المدير - تحديث المحادثة النشطة إلى:', chatId)
+      
+      // التحقق إذا كان chatId هو placeholder لإداري (admin-xxx)
+      if (chatId.startsWith('admin-')) {
+        // هذه محادثة إداري لم تُنشأ بعد
+        const adminId = chatId.replace('admin-', '')
+        console.log('📞 إنشاء محادثة admin_internal مع:', adminId)
+        
+        try {
+          const convRes = await getOrCreateConversation({
+            other_user_id: adminId,
+            type: 'admin_internal' as any, // سنحتاج تحديث الـ type
+            project_id: undefined
+          })
+          
+          if (convRes && convRes.success && convRes.data) {
+            console.log('✅ تم إنشاء محادثة admin_internal:', convRes.data.id)
+            setActiveConversationId(convRes.data.id)
+            setConversations(prev => [...prev, convRes.data!])
+            
+            // تحديث adminsWithConversations
+            setAdminsWithConversations(prev => 
+              prev.map(item => 
+                item.admin.id === adminId 
+                  ? { ...item, conversation: convRes.data!, hasConversation: true }
+                  : item
+              )
+            )
+            
+            // الانضمام للمحادثة عبر WebSocket
+            if (wsConnected) {
+              wsJoinConversation(convRes.data.id)
+            }
+          }
+        } catch (err) {
+          console.error('❌ فشل إنشاء محادثة admin_internal:', err)
+        }
+        
+        return
+      }
+      
+      // محادثة موجودة مسبقاً
       setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }))
       setActiveConversationId(chatId)
+      
+      // الانضمام للمحادثة الجديدة عبر WebSocket
+      if (wsConnected) {
+        console.log('🔌 الانضمام للمحادثة عبر WebSocket:', chatId)
+        wsJoinConversation(chatId)
+      }
+      
       return
     }
 
     const existing = conversations.find((c) => c.id === chatId)
     if (existing) {
+      console.log('✅ محادثة موجودة مسبقاً:', existing.id)
       setActiveConversationId(existing.id)
+      
+      // الانضمام للمحادثة عبر WebSocket
+      if (wsConnected) {
+        console.log('🔌 الانضمام للمحادثة عبر WebSocket:', existing.id)
+        wsJoinConversation(existing.id)
+      }
+      
       return
     }
 
     // user mode: create conversation for placeholders (general/project)
     try {
       const chatItem = chats.find(c => c.id === chatId)
-      if (!chatItem?.otherUserId) {
+      console.log('🔍 البحث عن chatItem:', chatItem)
+      
+      // ✅ FIX: لمحادثات المشاريع، نسمح بـ other_user_id = null
+      // سيتم إنشاء المحادثة بـ: client_id = user, admin_id = null, project_id = project
+      const otherUserId = chatItem?.otherUserId || null
+      
+      // للمحادثات العامة، يجب أن يكون هناك otherUserId
+      if (chatItem?.type === 'general' && !otherUserId) {
+        console.log('⚠️ محادثة عامة تحتاج إلى otherUserId')
         setActiveConversationId(null)
         return
       }
 
+      console.log('📞 إنشاء أو جلب محادثة - Type:', chatItem?.type, 'OtherUserId:', otherUserId, 'ProjectId:', chatItem?.projectId)
+      
       const convRes = await getOrCreateConversation({
-        other_user_id: chatItem.otherUserId,
-        type: chatItem.type,
-        project_id: chatItem.projectId
+        other_user_id: otherUserId || undefined,
+        type: chatItem!.type,
+        project_id: chatItem!.projectId
       })
+      
+      console.log('📨 استجابة إنشاء/جلب المحادثة:', convRes)
+      
       if (convRes && convRes.success && convRes.data) {
+        console.log('✅ تم إنشاء/جلب المحادثة:', convRes.data.id)
         setActiveConversationId(convRes.data.id)
         setConversations(prev => (convRes.data ? [...prev.filter(c => c.id !== convRes.data!.id), convRes.data!] : prev))
+        
+        // الانضمام للمحادثة عبر WebSocket
+        if (wsConnected) {
+          console.log('🔌 الانضمام للمحادثة الجديدة عبر WebSocket:', convRes.data.id)
+          wsJoinConversation(convRes.data.id)
+        }
       } else {
+        console.log('❌ فشل إنشاء/جلب المحادثة')
         setActiveConversationId(null)
       }
     } catch (err) {
-      console.error('Failed to select chat / get conversation:', err)
+      console.error('❌ خطأ في اختيار المحادثة:', err)
       setActiveConversationId(null)
     }
   }
 
-  const handleFileSelect = useCallback((file: File, forcedType?: MessageAttachment['type']) => {
+  const handleFileSelect = useCallback(async (file: File, forcedType?: MessageAttachment['type']) => {
     const isImage = file.type.startsWith('image/')
     const isVideo = file.type.startsWith('video/')
     const type: MessageAttachment['type'] = forcedType ?? (
@@ -647,14 +1413,89 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
       return
     }
 
-    const url = URL.createObjectURL(file)
-    sendMessage(inputValue, {
+    // إنشاء معاينة للصور والفيديو
+    let previewUrl: string | undefined
+    if (isImage || isVideo) {
+      previewUrl = URL.createObjectURL(file)
+    }
+
+    // عرض معاينة الملف
+    setSelectedFilePreview({
+      file,
       type,
-      url,
-      name: file.name,
-      size: file.size,
+      previewUrl
     })
-  }, [inputValue, language, sendMessage])
+    setFileError(null)
+  }, [language])
+
+  // دالة لإرسال الملف المعاين
+  const handleSendSelectedFile = useCallback(async () => {
+    if (!selectedFilePreview) return
+
+    const { file } = selectedFilePreview
+
+    // رفع الملف إلى S3
+    console.log('🚀 [FILE] بدء رفع الملف إلى S3')
+    const attachment = await uploadFileToS3(file)
+    
+    // تنظيف المعاينة
+    if (selectedFilePreview.previewUrl) {
+      URL.revokeObjectURL(selectedFilePreview.previewUrl)
+    }
+    setSelectedFilePreview(null)
+    
+    if (!attachment) {
+      console.error('❌ [FILE] فشل رفع الملف')
+      return
+    }
+    
+    console.log('✅ [FILE] تم رفع الملف بنجاح، إرسال الرسالة:', attachment)
+    
+    // إرسال الرسالة مع المرفق
+    sendMessage(inputValue, attachment)
+  }, [selectedFilePreview, inputValue, sendMessage, uploadFileToS3])
+
+  // دالة لإلغاء معاينة الملف
+  const handleCancelFilePreview = useCallback(() => {
+    if (selectedFilePreview?.previewUrl) {
+      URL.revokeObjectURL(selectedFilePreview.previewUrl)
+    }
+    setSelectedFilePreview(null)
+    setFileError(null)
+  }, [selectedFilePreview])
+
+  // معالجات السحب والإفلات
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // فقط إذا غادرنا المنطقة تماماً
+    if (e.currentTarget === e.target) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      const file = files[0]
+      handleFileSelect(file)
+    }
+  }, [handleFileSelect])
 
   const handleFileInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -757,27 +1598,54 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
 
       <div className={styles.chatMainRow}>
       <div className={styles.chatWindow}>
+        {isDragging && (
+          <div className={styles.dragOverlay}>
+            <div className={styles.dragOverlayContent}>
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <p>{language === 'ar' ? 'أفلت الملف هنا' : 'Drop file here'}</p>
+            </div>
+          </div>
+        )}
         <div className={styles.chatHeader}>
           <div className={styles.headerText}>
             <span className={styles.headerTitle}>
-              {isAdminMode
-                ? (activeChat?.type === 'general'
-                  ? (language === 'ar'
-                    ? `استفسار — ${activeChat?.clientName}`
-                    : `Inquiry — ${activeChat?.clientName}`)
-                  : (language === 'ar'
-                    ? `${activeChat?.name} · ${activeChat?.clientName}`
-                    : `${activeChat?.name} · ${activeChat?.clientName}`))
-                : (activeChat?.type === 'general'
-                  ? (language === 'ar' ? 'استفسار عام' : 'General Inquiry')
-                  : (language === 'ar'
-                    ? `محادثة مشروع ${activeChat?.name}`
-                    : `${activeChat?.name} Project Chat`))}
+              {/* عرض اسم الطرف الآخر بناءً على نوع المحادثة */}
+              {activeChat?.type === 'general'
+                ? (language === 'ar'
+                  ? `استفسار — ${activeChat?.clientName || activeChat?.name}`
+                  : `Inquiry — ${activeChat?.clientName || activeChat?.name}`)
+                : (language === 'ar'
+                  ? `${activeChat?.name}${activeChat?.clientName ? ' · ' + activeChat?.clientName : ''}`
+                  : `${activeChat?.name}${activeChat?.clientName ? ' · ' + activeChat?.clientName : ''}`)}
             </span>
             <span className={styles.headerStatus}>
-              {isAdminMode && activeChat?.clientEmail
-                ? activeChat.clientEmail
-                : (activeChat?.subtitle ?? '')}
+              {/* عرض البريد الإلكتروني للطرف الآخر */}
+              {activeChat?.clientEmail || activeChat?.subtitle || ''}
+              {/* مؤشر حالة WebSocket */}
+              {wsStatus === 'connected' && (
+                <span style={{ marginLeft: '8px', marginRight: '8px', color: '#4ade80' }} title="WebSocket متصل">
+                  ●
+                </span>
+              )}
+              {wsStatus === 'connecting' && (
+                <span style={{ marginLeft: '8px', marginRight: '8px', color: '#fbbf24' }} title="جاري الاتصال...">
+                  ●
+                </span>
+              )}
+              {wsStatus === 'reconnecting' && (
+                <span style={{ marginLeft: '8px', marginRight: '8px', color: '#fb923c' }} title="إعادة الاتصال...">
+                  ●
+                </span>
+              )}
+              {(wsStatus === 'disconnected' || wsStatus === 'failed') && (
+                <span style={{ marginLeft: '8px', marginRight: '8px', color: '#ef4444' }} title="غير متصل">
+                  ●
+                </span>
+              )}
             </span>
           </div>
           {isAdminMode && lastMessageFromClient && (
@@ -787,7 +1655,13 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
           )}
         </div>
 
-        <div className={styles.chatMessages}>
+        <div 
+          className={styles.chatMessages}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           {activeMessages.length === 0 && (
             <div className={styles.emptyChat}>
               <span className={styles.emptyChatIcon}>💬</span>
@@ -805,14 +1679,13 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               <div className={styles.messageContentWrapper}>
                 <div className={styles.messageMeta}>
                   <span>{msg.time}</span>
-                  {msg.sender === 'received' && (
-                    <span className={isAdminMode ? styles.clientRole : styles.adminRole}>
-                      {isAdminMode
-                        ? (language === 'ar' ? 'عميل' : 'client')
-                        : 'admin'}
+                  {/* عرض الـ badge بناءً على senderType الفعلي من API */}
+                  {msg.senderType === 'client' && (
+                    <span className={styles.clientRole}>
+                      {language === 'ar' ? 'عميل' : 'client'}
                     </span>
                   )}
-                  {msg.sender === 'sent' && isAdminMode && (
+                  {msg.senderType === 'admin' && (
                     <span className={styles.adminRole}>admin</span>
                   )}
                   <span className={styles.adminName}>{msg.senderName}</span>
@@ -824,6 +1697,19 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
                     </div>
                   )}
                   {msg.text && <span>{msg.text}</span>}
+                  {/* مؤشر حالة الرسالة */}
+                  {msg.sender === 'sent' && msg.status && (
+                    <span style={{ 
+                      fontSize: '0.7rem', 
+                      marginLeft: '4px',
+                      marginRight: '4px',
+                      color: msg.status === 'read' ? '#4ade80' : '#9ca3af',
+                      display: 'inline-block',
+                      verticalAlign: 'bottom'
+                    }}>
+                      {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓' : ''}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -849,8 +1735,66 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               {fileError}
             </p>
           )}
+          {uploadingFile && (
+            <p className={styles.uploadingIndicator} role="status">
+              {language === 'ar' ? '📤 جاري رفع الملف...' : '📤 Uploading file...'}
+            </p>
+          )}
+          {selectedFilePreview && (
+            <div className={styles.filePreviewContainer}>
+              <div className={styles.filePreviewContent}>
+                {selectedFilePreview.type === 'image' && selectedFilePreview.previewUrl && (
+                  <img 
+                    src={selectedFilePreview.previewUrl} 
+                    alt={selectedFilePreview.file.name}
+                    className={styles.filePreviewImage}
+                  />
+                )}
+                {selectedFilePreview.type === 'video' && selectedFilePreview.previewUrl && (
+                  <video 
+                    src={selectedFilePreview.previewUrl}
+                    controls
+                    className={styles.filePreviewVideo}
+                  />
+                )}
+                {selectedFilePreview.type === 'file' && (
+                  <div className={styles.filePreviewFile}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </div>
+                )}
+                <div className={styles.filePreviewInfo}>
+                  <span className={styles.filePreviewName}>{selectedFilePreview.file.name}</span>
+                  <span className={styles.filePreviewSize}>{formatFileSize(selectedFilePreview.file.size)}</span>
+                </div>
+              </div>
+              <div className={styles.filePreviewActions}>
+                <button 
+                  type="button"
+                  onClick={handleCancelFilePreview}
+                  className={styles.filePreviewCancel}
+                  disabled={uploadingFile}
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleSendSelectedFile}
+                  className={styles.filePreviewSend}
+                  disabled={uploadingFile}
+                >
+                  {uploadingFile 
+                    ? (language === 'ar' ? 'جاري الرفع...' : 'Uploading...')
+                    : (language === 'ar' ? 'إرسال' : 'Send')
+                  }
+                </button>
+              </div>
+            </div>
+          )}
         <form className={styles.chatInputContainer} onSubmit={handleSend}>
-          <button type="submit" className={styles.sendBtn} disabled={!inputValue.trim()}>
+          <button type="submit" className={styles.sendBtn} disabled={!inputValue.trim() || uploadingFile}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }}>
               <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -869,7 +1813,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
                   : (language === 'ar' ? 'اكتب رسالتك هنا...' : 'Type your message here...')
               }
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
             />
             <button
               ref={emojiBtnRef}
@@ -929,6 +1873,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               title={language === 'ar' ? 'إرفاق ملف' : 'Attach file'}
               aria-label={language === 'ar' ? 'إرفاق ملف' : 'Attach file'}
               onClick={() => attachInputRef.current?.click()}
+              disabled={uploadingFile}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
@@ -940,6 +1885,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               title={language === 'ar' ? 'إرفاق فيديو' : 'Attach video'}
               aria-label={language === 'ar' ? 'إرفاق فيديو' : 'Attach video'}
               onClick={() => videoInputRef.current?.click()}
+              disabled={uploadingFile}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="23 7 16 12 23 17 23 7"></polygon>
@@ -952,6 +1898,7 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               title={language === 'ar' ? 'إرفاق صورة' : 'Attach image'}
               aria-label={language === 'ar' ? 'إرفاق صورة' : 'Attach image'}
               onClick={() => imageInputRef.current?.click()}
+              disabled={uploadingFile}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>

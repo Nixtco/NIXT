@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat Test Client</title>
+    <!--
+    🔍 تعليمات التشغيل:
+    
+    هذا الملف يمكن تشغيله بعدة طرق:
+    
+    1️⃣ عبر خادم التطبيق (الطريقة الموصى بها):
+       - افتح: http://localhost:8080/ws/chat/client
+    
+    2️⃣ عبر خادم محلي بسيط:
+       - اذهب لمجلد المشروع
+       - قم بتشغيل: npx http-server .
+       - ثم افتح: http://localhost:8080/src/modules/api/v1/websocket/examples/client.example.html
+    
+    3️⃣ استخدام Python:
+       - Python 3: python -m http.server 8000
+       - Python 2: python -m SimpleHTTPServer 8000
+       - ثم افتح: http://localhost:8000/src/modules/api/v1/websocket/examples/client.example.html
+    
+    4️⃣ استخدام VS Code Live Server:
+       - انقر على ملف HTML بزر الماوس الأيمن
+       - اختر "Open with Live Server"
+    
+    ⚠️ لا تقم بفتح الملف مباشرة من النظام (file://...)
+    لأنه سيسبب مشاكل CORS
+    -->
+    <title>WebSocket Chat Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 40px);
+        }
+        
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-header {
+            background: #673AB7;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .users-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .user-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .user-item.active {
+            background: #e8eaf6;
+            border-right: 4px solid #673AB7;
+        }
+        
+        .user-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .user-name {
+            font-weight: 500;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .user-email {
+            font-size: 11px;
+            color: #999;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .user-role {
+            font-size: 12px;
+            color: #666;
+            background: #f0f0f0;
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-top: 3px;
+        }
+        
+        .online-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4CAF50;
+            flex-shrink: 0;
+        }
+        
+        .online-status.offline {
+            background: #9E9E9E;
+        }
+        
+        .container {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .status {
+            padding: 10px 20px;
+            background: #f9f9f9;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 5px;
+        }
+        
+        .status-indicator.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 8px #4CAF50;
+        }
+        
+        .status-indicator.disconnected {
+            background: #f44336;
+        }
+        
+        .config {
+            padding: 20px;
+            background: #fafafa;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .config input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        
+        .config button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px 5px 5px 0;
+            font-size: 13px;
+        }
+        
+        .config button:hover {
+            background: #45a049;
+        }
+        
+        .config button.disconnect {
+            background: #f44336;
+        }
+        
+        .config button.disconnect:hover {
+            background: #da190b;
+        }
+        
+        .config button.secondary {
+            background: #2196F3;
+        }
+        
+        .config button.secondary:hover {
+            background: #0b7dda;
+        }
+        
+        .chat-header {
+            padding: 15px 20px;
+            background: #f9f9f9;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chat-info {
+            flex: 1;
+        }
+        
+        .chat-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .chat-subtitle {
+            font-size: 12px;
+            color: #666;
+            margin-top: 3px;
+        }
+        
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+        
+        .message {
+            padding: 10px 15px;
+            margin: 8px 0;
+            border-radius: 8px;
+            background: #f0f0f0;
+            word-wrap: break-word;
+            max-width: 70%;
+        }
+        
+        .message.sent {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-right: 0;
+            margin-left: auto;
+        }
+        
+        .message.received {
+            background: white;
+            border: 1px solid #e0e0e0;
+            margin-left: 0;
+        }
+        
+        .message.system {
+            background: #fff3e0;
+            text-align: center;
+            font-style: italic;
+            max-width: 100%;
+            font-size: 13px;
+        }
+        
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            max-width: 100%;
+        }
+        
+        .message-header {
+            font-size: 11px;
+            color: rgba(255,255,255,0.8);
+            margin-bottom: 5px;
+        }
+        
+        .message.received .message-header,
+        .message.system .message-header,
+        .message.error .message-header {
+            color: #666;
+        }
+        
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-area input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 14px;
+        }
+        
+        .input-area button {
+            width: 100px;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .input-area button:hover {
+            opacity: 0.9;
+        }
+        
+        .actions {
+            padding: 10px 20px;
+            background: #fafafa;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .actions button {
+            padding: 8px 15px;
+            background: #9E9E9E;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .actions button:hover {
+            background: #757575;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 30px 20px;
+            color: #666;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Sidebar with users list -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>👥 المستخدمين</h3>
+            </div>
+            <div id="usersList" class="users-list">
+                <div class="loading">يرجى الاتصال أولاً</div>
+            </div>
+        </div>
+        
+        <!-- Main chat container -->
+        <div class="container">
+            <div class="header">
+                <h1>🔌 WebSocket Chat Test Client</h1>
+            </div>
+        
+            <div class="status">
+                <div>
+                    الحالة: <span id="statusText">غير متصل</span>
+                    <span id="statusIndicator" class="status-indicator disconnected"></span>
+                </div>
+                <div id="userInfo"></div>
+            </div>
+            
+            <div class="config">
+                <input type="text" id="wsUrl" placeholder="WebSocket URL" value="ws://localhost:8080/ws/chat">
+                <input type="text" id="apiUrl" placeholder="API URL" value="http://localhost:8080/api/v1">
+                <input type="text" id="token" placeholder="JWT Token">
+                <button onclick="connect()">اتصال</button>
+                <button class="disconnect" onclick="disconnect()">قطع الاتصال</button>
+                <button class="secondary" onclick="loadUsers()">تحديث المستخدمين</button>
+                <button onclick="clearMessages()">مسح الرسائل</button>
+            </div>
+            
+            <div class="chat-header" id="chatHeader" style="display: none;">
+                <div class="chat-info">
+                    <div class="chat-title" id="chatTitle">اختر مستخدماً للمحادثة</div>
+                    <div class="chat-subtitle" id="chatSubtitle"></div>
+                </div>
+            </div>
+            
+            <div class="actions">
+                <button onclick="sendPing()">📡 Ping</button>
+                <button onclick="startTyping()">⌨️ بدء الكتابة</button>
+                <button onclick="stopTyping()">⏸️ إيقاف الكتابة</button>
+            </div>
+            
+            <div class="messages" id="messages">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <div>اختر مستخدماً من القائمة للبدء بالمحادثة</div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="اكتب رسالتك هنا..." 
+                       onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button onclick="sendMessage()">إرسال</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentConversationId = null;
+        let currentUser = null;
+        let currentUserId = null;
+        let users = [];
+
+        function addMessage(content, type = 'system') {
+            const messagesDiv = document.getElementById('messages');
+            
+            // Remove empty state if exists
+            const emptyState = messagesDiv.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const time = new Date().toLocaleTimeString('ar-SA');
+            messageDiv.innerHTML = `
+                <div class="message-header">${time}</div>
+                <div>${content}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(isConnected) {
+            const statusText = document.getElementById('statusText');
+            const statusIndicator = document.getElementById('statusIndicator');
+            
+            if (isConnected) {
+                statusText.textContent = 'متصل';
+                statusIndicator.className = 'status-indicator connected';
+            } else {
+                statusText.textContent = 'غير متصل';
+                statusIndicator.className = 'status-indicator disconnected';
+            }
+        }
+
+        async function loadUsers() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const token = document.getElementById('token').value;
+            
+            if (!token) {
+                alert('الرجاء إدخال JWT Token أولاً');
+                return;
+            }
+            
+            const usersList = document.getElementById('usersList');
+            usersList.innerHTML = '<div class="loading">جاري تحميل المستخدمين...</div>';
+            
+            try {
+                // استخدام endpoint الجديد للمستخدمين المتاحين للمحادثة
+                const response = await fetch(`${apiUrl}/users/chat/available`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'فشل في جلب المستخدمين');
+                }
+                
+                const result = await response.json();
+                users = result.data || [];
+                
+                if (users.length === 0) {
+                    usersList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👤</div><div>لا يوجد مستخدمين متاحين للمحادثة</div></div>';
+                    return;
+                }
+                
+                renderUsers(users);
+                addMessage(`✅ تم تحميل ${users.length} مستخدم`, 'system');
+                
+            } catch (error) {
+                usersList.innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>${error.message}</div></div>`;
+                addMessage(`❌ خطأ في تحميل المستخدمين: ${error.message}`, 'error');
+            }
+        }
+
+        function renderUsers(usersList) {
+            const usersListDiv = document.getElementById('usersList');
+            usersListDiv.innerHTML = '';
+            
+            usersList.forEach(user => {
+                // Skip current user
+                if (user.id === currentUserId) return;
+                
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.onclick = () => selectUser(user);
+                
+                const initial = (user.display_name || user.email || 'U')[0].toUpperCase();
+                const displayName = user.display_name || user.first_name || user.email;
+                const role = user.role || 'user';
+                
+                userItem.innerHTML = `
+                    <div class="user-avatar">${initial}</div>
+                    <div class="user-info">
+                        <div class="user-name">${displayName}</div>
+                        <div class="user-email">${user.email}</div>
+                        <span class="user-role">${role}</span>
+                    </div>
+                    <div class="online-status offline"></div>
+                `;
+                
+                usersListDiv.appendChild(userItem);
+            });
+        }
+
+        async function selectUser(user) {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const token = document.getElementById('token').value;
+            
+            currentUser = user;
+            
+            // Update active state
+            document.querySelectorAll('.user-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Show chat header
+            const chatHeader = document.getElementById('chatHeader');
+            const chatTitle = document.getElementById('chatTitle');
+            const chatSubtitle = document.getElementById('chatSubtitle');
+            
+            chatHeader.style.display = 'flex';
+            chatTitle.textContent = user.display_name || user.email;
+            chatSubtitle.textContent = `جاري إنشاء/جلب المحادثة...`;
+            
+            addMessage(`📱 جاري التواصل مع ${user.display_name || user.email}...`, 'system');
+            
+            try {
+                // Get or create conversation
+                const response = await fetch(`${apiUrl}/conversations/get-or-create`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        other_user_id: user.id,
+                        type: 'general'
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('فشل في إنشاء/جلب المحادثة');
+                }
+                
+                const result = await response.json();
+                currentConversationId = result.data.id;
+                
+                chatSubtitle.textContent = `Conversation ID: ${currentConversationId}`;
+                
+                // Join conversation via WebSocket
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'conversation:join',
+                        data: { conversationId: currentConversationId }
+                    }));
+                }
+                
+                addMessage(`✅ تم الاتصال بمحادثة: ${currentConversationId}`, 'system');
+                
+            } catch (error) {
+                chatSubtitle.textContent = `خطأ: ${error.message}`;
+                addMessage(`❌ خطأ: ${error.message}`, 'error');
+            }
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            const token = document.getElementById('token').value;
+            
+            if (!token) {
+                alert('الرجاء إدخال JWT Token');
+                return;
+            }
+            
+            const wsUrlWithToken = `${url}?token=${token}`;
+            
+            try {
+                ws = new WebSocket(wsUrlWithToken);
+                
+                ws.onopen = () => {
+                    updateStatus(true);
+                    addMessage('✅ تم الاتصال بنجاح', 'system');
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleMessage(message);
+                    } catch (error) {
+                        addMessage(`خطأ في معالجة الرسالة: ${error.message}`, 'error');
+                    }
+                };
+                
+                ws.onclose = () => {
+                    updateStatus(false);
+                    addMessage('❌ تم قطع الاتصال', 'system');
+                };
+                
+                ws.onerror = (error) => {
+                    addMessage(`خطأ في الاتصال: ${error}`, 'error');
+                };
+                
+            } catch (error) {
+                addMessage(`فشل الاتصال: ${error.message}`, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'auth:success':
+                    currentUserId = message.data.userId;
+                    addMessage(`🔐 تم المصادقة بنجاح - User ID: ${message.data.userId}`, 'system');
+                    document.getElementById('userInfo').textContent = `User: ${message.data.userId}`;
+                    // Auto-load users after authentication
+                    loadUsers();
+                    break;
+                    
+                case 'message:sent':
+                    const sender = message.data.sender?.display_name || message.data.sender_id;
+                    // تحديد نوع الرسالة بناءً على المرسل
+                    const messageType = message.data.sender_id === currentUserId ? 'sent' : 'received';
+                    const displayText = messageType === 'sent' ? message.data.text : `${sender}: ${message.data.text}`;
+                    addMessage(displayText, messageType);
+                    break;
+                    
+                case 'message:delivered':
+                    addMessage(`✓ تم توصيل الرسالة`, 'system');
+                    break;
+                    
+                case 'message:read':
+                    addMessage(`✓✓ تم قراءة الرسالة`, 'system');
+                    break;
+                    
+                case 'message:deleted':
+                    addMessage(`🗑️ تم حذف الرسالة ${message.data.messageId}`, 'system');
+                    break;
+                    
+                case 'typing:start':
+                    addMessage(`⌨️ ${message.data.displayName || message.data.userId} يكتب...`, 'system');
+                    break;
+                    
+                case 'typing:stop':
+                    addMessage(`⏸️ ${message.data.userId} توقف عن الكتابة`, 'system');
+                    break;
+                    
+                case 'user:online':
+                    addMessage(`🟢 ${message.data.userId} متصل الآن`, 'system');
+                    break;
+                    
+                case 'user:offline':
+                    addMessage(`🔴 ${message.data.userId} غير متصل`, 'system');
+                    break;
+                    
+                case 'conversation:joined':
+                    addMessage(`✅ تم الانضمام للمحادثة`, 'system');
+                    break;
+                    
+                case 'conversation:left':
+                    addMessage(`👋 تم مغادرة المحادثة`, 'system');
+                    break;
+                    
+                case 'pong':
+                    addMessage(`🏓 Pong received`, 'system');
+                    break;
+                    
+                case 'error':
+                    addMessage(`❌ خطأ: ${message.error}`, 'error');
+                    break;
+                    
+                default:
+                    addMessage(`📨 ${message.type}: ${JSON.stringify(message.data)}`, 'system');
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            
+            if (!text || !ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            
+            if (!currentConversationId) {
+                alert('الرجاء اختيار مستخدم للمحادثة معه');
+                return;
+            }
+            
+            ws.send(JSON.stringify({
+                type: 'message:send',
+                data: {
+                    conversation_id: currentConversationId,
+                    text: text
+                }
+            }));
+            
+            // لا نضيف الرسالة محلياً - سنستقبلها من السيرفر
+            input.value = '';
+        }
+
+        function sendPing() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('غير متصل');
+                return;
+            }
+            
+            ws.send(JSON.stringify({ type: 'ping' }));
+            addMessage('🏓 تم إرسال Ping', 'system');
+        }
+
+        function startTyping() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('غير متصل');
+                return;
+            }
+            
+            if (!currentConversationId) {
+                alert('الرجاء اختيار مستخدم أولاً');
+                return;
+            }
+            
+            ws.send(JSON.stringify({
+                type: 'typing:start',
+                data: {
+                    conversationId: currentConversationId,
+                    displayName: 'Test User'
+                }
+            }));
+        }
+
+        function stopTyping() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('غير متصل');
+                return;
+            }
+            
+            if (!currentConversationId) {
+                alert('الرجاء اختيار مستخدم أولاً');
+                return;
+            }
+            
+            ws.send(JSON.stringify({
+                type: 'typing:stop',
+                data: { conversationId: currentConversationId }
+            }));
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div>اختر مستخدماً من القائمة للبدء بالمحادثة</div></div>';
+        }
+
+        // Auto-ping to keep connection alive
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000); // Ping every 30 seconds
+    </script>
+</body>
+</html>

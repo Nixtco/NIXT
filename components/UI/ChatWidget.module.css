@@ -21,6 +21,7 @@
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
   order: 1;
+  position: relative;
 }
 
 [dir="rtl"] .chatWindow {
@@ -575,6 +576,170 @@
   padding: 8px 24px 0;
   font-size: 0.78rem;
   color: #ff6b6b;
+}
+
+.uploadingIndicator {
+  margin: 0;
+  padding: 8px 24px 0;
+  font-size: 0.78rem;
+  color: #7042f8;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.filePreviewContainer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+  background: rgba(112, 66, 248, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filePreviewContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filePreviewImage {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid rgba(112, 66, 248, 0.3);
+}
+
+.filePreviewVideo {
+  width: 120px;
+  height: 80px;
+  border-radius: 8px;
+  border: 2px solid rgba(112, 66, 248, 0.3);
+}
+
+.filePreviewFile {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(112, 66, 248, 0.1);
+  border-radius: 8px;
+  border: 2px solid rgba(112, 66, 248, 0.3);
+  color: #7042f8;
+}
+
+.filePreviewInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.filePreviewName {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-color, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filePreviewSize {
+  font-size: 0.75rem;
+  color: var(--text-dim, #888);
+}
+
+.filePreviewActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.filePreviewCancel,
+.filePreviewSend {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.filePreviewCancel {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim, #888);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filePreviewCancel:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-color, #fff);
+}
+
+.filePreviewSend {
+  background: linear-gradient(135deg, #7042f8, #5a32c6);
+  color: white;
+  box-shadow: 0 2px 8px rgba(112, 66, 248, 0.3);
+}
+
+.filePreviewSend:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(112, 66, 248, 0.4);
+}
+
+.filePreviewCancel:disabled,
+.filePreviewSend:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dragOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(112, 66, 248, 0.15);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed rgba(112, 66, 248, 0.6);
+  border-radius: 16px;
+  animation: fadeIn 0.2s ease;
+}
+
+.dragOverlayContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #7042f8;
+}
+
+.dragOverlayContent svg {
+  animation: bounce 1s ease-in-out infinite;
+}
+
+.dragOverlayContent p {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-color, #fff);
+  margin: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .messageAttachment {

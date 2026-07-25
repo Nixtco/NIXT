@@ -29,10 +29,12 @@ export function useApi<T>(endpoint: string, options?: RequestInit): ApiResponse<
         setError(null)
         
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
+        // استخدام auth_token بدلاً من token لتوحيد الاسم
+        const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
         const response = await fetch(buildApiUrl(endpoint, baseUrl), {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+            'Authorization': `Bearer ${token || ''}`,
             ...options?.headers,
           },
           ...options,
@@ -60,7 +62,8 @@ export function useApi<T>(endpoint: string, options?: RequestInit): ApiResponse<
 
 export async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3003/api/v1'
-  const token = localStorage.getItem('token')
+  // استخدام auth_token بدلاً من token لتوحيد الاسم مع WebSocket
+  const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
   const fullUrl = buildApiUrl(endpoint, baseUrl)
   
   console.log('🌐 API Call:', {
@@ -92,8 +95,20 @@ export async function apiCall<T>(endpoint: string, options?: RequestInit): Promi
     let errorMessage = `HTTP error! status: ${response.status}`
     try {
       const errorData = await response.json()
+      // console.error('response: ',response)
       console.error('❌ API Error Response:', errorData)
       console.error('Error Details:', JSON.stringify(errorData, null, 2))
+      
+      // Handle Rate Limiting (429 Too Many Requests)
+      if (response.status === 429 && errorData.retryAfter) {
+        const retryAfter = errorData.retryAfter
+        console.warn(`⏳ Rate limited. Retry after ${retryAfter} seconds`)
+        
+        // Wait and retry automatically
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000))
+        console.log('🔄 Retrying request after rate limit...')
+        return apiCall<T>(endpoint, options)
+      }
       
       // Extract error message from various formats
       if (errorData.message) {

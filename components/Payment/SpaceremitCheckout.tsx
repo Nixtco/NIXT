@@ -164,6 +164,12 @@ export default function SpaceremitCheckout({
     };
 
     loadConfig();
+
+    // Handle URL hash from SpaceRemit authorization redirect
+    if (window.location.hash) {
+      // Clean up the hash without reloading the page
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
   }, []);
 
   useEffect(() => {
@@ -236,10 +242,14 @@ export default function SpaceremitCheckout({
   }, [config]);
 
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); // Always prevent default form submission
+    
     if (!gatewayReady) {
-      event.preventDefault();
       setError('Payment gateway is still loading. Please wait a moment and try again.');
+      return;
     }
+    
+    // SpaceRemit handles everything via JavaScript, no actual form submission needed
   };
 
   if (loading) {
@@ -292,8 +302,6 @@ export default function SpaceremitCheckout({
         id="spaceremit-form"
         className={styles.paymentForm}
         onSubmit={handleFormSubmit}
-        action="#"
-        method="post"
       >
         <input type="hidden" name="amount" value={amount.toFixed(2)} readOnly />
         <input type="hidden" name="currency" value={currency} readOnly />

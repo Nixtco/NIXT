@@ -3,10 +3,17 @@ import { apiCall } from '@/hooks/useApi'
 // ==================== Types ====================
 
 export interface MessageAttachment {
-  type: 'image' | 'video' | 'file'
+  type: 'image' | 'video' | 'file' | 'payment_request'
   url: string
   name: string
   size: number
+  // معلومات طلب الدفع
+  payment_data?: {
+    amount: number
+    currency: string
+    description?: string
+    payment_link?: string
+  }
 }
 
 export interface Message {

@@ -32,10 +32,17 @@ export interface ChatWidgetProps {
 }
 
 interface MessageAttachment {
-  type: 'image' | 'video' | 'file'
+  type: 'image' | 'video' | 'file' | 'payment_request'
   url: string
   name: string
   size: number
+  // معلومات طلب الدفع
+  payment_data?: {
+    amount: number
+    currency: string
+    description?: string
+    payment_link?: string
+  }
 }
 
 interface Message {
@@ -264,6 +271,9 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     previewUrl?: string;
   } | null>(null) // معاينة الملف قبل الإرسال
   const [isDragging, setIsDragging] = useState(false) // حالة السحب والإفلات
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false) // dialog طلب الدفع
+  const [paymentAmount, setPaymentAmount] = useState<string>('') // المبلغ المطلوب
+  const [paymentDescription, setPaymentDescription] = useState<string>('') // وصف الدفع
 
   // WebSocket Integration - استخدام useMemo للـ handlers
   const wsHandlers = useMemo(() => ({
@@ -1464,6 +1474,53 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
     setFileError(null)
   }, [selectedFilePreview])
 
+  // دالة لإرسال طلب الدفع
+  const handleSendPaymentRequest = useCallback(async () => {
+    const amount = parseFloat(paymentAmount)
+    
+    if (isNaN(amount) || amount <= 0) {
+      setFileError(language === 'ar' ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount')
+      return
+    }
+    
+    // إنشاء payment attachment
+    const paymentAttachment: MessageAttachment = {
+      type: 'payment_request',
+      url: '', // لا نحتاج URL فعلي
+      name: `Payment Request: $${amount}`,
+      size: 0,
+      payment_data: {
+        amount,
+        currency: 'USD',
+        description: paymentDescription.trim() || undefined,
+        // سيتم توليد رابط الدفع في Backend
+      }
+    }
+    
+    // إرسال رسالة مع طلب الدفع
+    const message = paymentDescription.trim() 
+      ? paymentDescription 
+      : (language === 'ar' 
+        ? `طلب دفع بمبلغ $${amount}` 
+        : `Payment request for $${amount}`)
+    
+    await sendMessage(message, paymentAttachment)
+    
+    // إغلاق الـ dialog
+    setShowPaymentDialog(false)
+    setPaymentAmount('')
+    setPaymentDescription('')
+    setFileError(null)
+  }, [paymentAmount, paymentDescription, language, sendMessage])
+
+  // دالة لإلغاء طلب الدفع
+  const handleCancelPaymentRequest = useCallback(() => {
+    setShowPaymentDialog(false)
+    setPaymentAmount('')
+    setPaymentDescription('')
+    setFileError(null)
+  }, [])
+
   // معالجات السحب والإفلات
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -1513,6 +1570,57 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
   }
 
   const renderAttachment = (attachment: MessageAttachment) => {
+    // طلب دفع
+    if (attachment.type === 'payment_request' && attachment.payment_data) {
+      const { amount, currency, description, payment_link } = attachment.payment_data
+      
+      return (
+        <div className={styles.paymentRequestCard}>
+          <div className={styles.paymentRequestHeader}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
+            <span className={styles.paymentRequestTitle}>
+              {language === 'ar' ? 'طلب دفع' : 'Payment Request'}
+            </span>
+          </div>
+          <div className={styles.paymentRequestBody}>
+            <div className={styles.paymentRequestAmount}>
+              <span className={styles.paymentCurrency}>{currency}</span>
+              <span className={styles.paymentValue}>{amount.toFixed(2)}</span>
+            </div>
+            {description && (
+              <p className={styles.paymentRequestDescription}>{description}</p>
+            )}
+          </div>
+          <div className={styles.paymentRequestActions}>
+            {payment_link ? (
+              <a 
+                href={payment_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.paymentRequestButton}
+              >
+                {language === 'ar' ? '💳 ادفع الآن' : '💳 Pay Now'}
+              </a>
+            ) : (
+              <button 
+                className={styles.paymentRequestButton}
+                onClick={() => {
+                  // سيتم تنفيذ الدفع باستخدام SpaceRemit
+                  const paymentUrl = `/payment?amount=${amount}&currency=${currency}&notes=${encodeURIComponent(description || '')}&source=chat`
+                  window.open(paymentUrl, '_blank')
+                }}
+              >
+                {language === 'ar' ? '💳 ادفع الآن' : '💳 Pay Now'}
+              </button>
+            )}
+          </div>
+        </div>
+      )
+    }
+    
     if (attachment.type === 'image') {
       return (
         <a
@@ -1793,6 +1901,77 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               </div>
             </div>
           )}
+          {/* Payment Request Dialog */}
+          {showPaymentDialog && (
+            <div className={styles.paymentDialog}>
+              <div className={styles.paymentDialogContent}>
+                <div className={styles.paymentDialogHeader}>
+                  <h3>{language === 'ar' ? 'إرسال طلب دفع' : 'Send Payment Request'}</h3>
+                  <button 
+                    type="button"
+                    onClick={handleCancelPaymentRequest}
+                    className={styles.paymentDialogClose}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+                <div className={styles.paymentDialogBody}>
+                  <div className={styles.paymentDialogField}>
+                    <label htmlFor="paymentAmount">
+                      {language === 'ar' ? 'المبلغ المطلوب (USD)' : 'Amount (USD)'}
+                    </label>
+                    <input
+                      id="paymentAmount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder={language === 'ar' ? '0.00' : '0.00'}
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className={styles.paymentDialogInput}
+                      autoFocus
+                    />
+                  </div>
+                  <div className={styles.paymentDialogField}>
+                    <label htmlFor="paymentDescription">
+                      {language === 'ar' ? 'الوصف (اختياري)' : 'Description (optional)'}
+                    </label>
+                    <textarea
+                      id="paymentDescription"
+                      placeholder={language === 'ar' ? 'مثال: دفعة أولى للمشروع' : 'e.g: Initial project payment'}
+                      value={paymentDescription}
+                      onChange={(e) => setPaymentDescription(e.target.value)}
+                      className={styles.paymentDialogTextarea}
+                      rows={3}
+                    />
+                  </div>
+                  {fileError && (
+                    <p className={styles.paymentDialogError}>{fileError}</p>
+                  )}
+                </div>
+                <div className={styles.paymentDialogActions}>
+                  <button 
+                    type="button"
+                    onClick={handleCancelPaymentRequest}
+                    className={styles.paymentDialogCancelBtn}
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleSendPaymentRequest}
+                    className={styles.paymentDialogSendBtn}
+                    disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                  >
+                    {language === 'ar' ? 'إرسال الطلب' : 'Send Request'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         <form className={styles.chatInputContainer} onSubmit={handleSend}>
           <button type="submit" className={styles.sendBtn} disabled={!inputValue.trim() || uploadingFile}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -1867,6 +2046,22 @@ export default function ChatWidget({ mode = 'user', onUnreadChange }: ChatWidget
               accept="image/*"
               onChange={(e) => handleFileInputChange(e, 'image')}
             />
+            {/* زر طلب الدفع - فقط للإداريين */}
+            {isAdminMode && (
+              <button
+                type="button"
+                className={`${styles.actionBtn} ${styles.paymentBtn}`}
+                title={language === 'ar' ? 'إرسال طلب دفع' : 'Send payment request'}
+                aria-label={language === 'ar' ? 'إرسال طلب دفع' : 'Send payment request'}
+                onClick={() => setShowPaymentDialog(true)}
+                disabled={uploadingFile}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+              </button>
+            )}
             <button
               type="button"
               className={styles.actionBtn}

@@ -47,7 +47,7 @@ export default function AccountPage() {
                     'Authorization': `Bearer ${token}`
                 }
             });
-            
+            // لفيرسيل
             if (response.ok) {
                 alert('Subscription cancelled successfully');
                 await refreshUser();
